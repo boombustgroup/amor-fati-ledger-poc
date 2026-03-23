@@ -1,0 +1,36 @@
+name: Formal Verification
+on:
+  push:
+    branches: [main]
+    paths: ['src/main/scala-stainless/**']
+  pull_request:
+    branches: [main]
+    paths: ['src/main/scala-stainless/**']
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Z3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y z3
+
+      - name: Download Stainless
+        run: |
+          curl -L -o /tmp/stainless.zip \
+            https://github.com/epfl-lara/stainless/releases/download/v0.9.9.2/stainless-dotty-standalone-0.9.9.2-linux.zip
+          unzip /tmp/stainless.zip -d /tmp/stainless-standalone
+          # Use system z3 instead of bundled
+          cp $(which z3) /tmp/stainless-standalone/z3/z3
+
+      - name: Verify SFC properties
+        run: |
+          /tmp/stainless-standalone/stainless --solvers=smt-z3 --timeout=60 \
+            src/main/scala-stainless/Verified.scala

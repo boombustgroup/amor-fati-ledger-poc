@@ -7,3 +7,6 @@ target/
 *.class
 *.log
 *.jar
+target/
+.stainless-cache/
+stainless-stack-trace.txt
