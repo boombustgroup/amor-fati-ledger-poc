@@ -14,6 +14,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-          cache: sbt
+      - uses: sbt/setup-sbt@v1
       - name: Compile and test
         run: sbt scalafmtCheckAll compile test
