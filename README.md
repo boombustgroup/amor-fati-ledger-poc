@@ -10,7 +10,7 @@ debit/credit pair — the interpreter makes it mathematically impossible
 to produce unbalanced books.
 
 Built for [amor-fati](https://github.com/boombustgroup/amor-fati), a
-macroeconomic SFC-ABM simulator of the Polish economy.
+macroeconomic SFC-ABM simulation engine.
 
 ## Why?
 
