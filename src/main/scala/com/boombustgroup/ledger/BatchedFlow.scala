@@ -2,29 +2,44 @@ package com.boombustgroup.ledger
 
 /** A batch of monetary flows from one sector to another.
   *
-  * Performance-critical: one Array[Long] allocation per mechanism x sector, not per agent. At 100K households this is the difference
-  * between millions of GC-pressured Flow objects and a single cache-friendly array.
-  *
-  * @param from
-  *   source sector (who pays)
-  * @param to
-  *   target sector (who receives)
-  * @param amounts
-  *   per-agent amounts, indexed by agent position within `from` sector. amounts(42) = what agent #42 pays.
-  * @param targetIndices
-  *   routing map: targetIndices(42) = 3 means agent #42 in `from` pays agent #3 in `to`. For 1:1 same-index flows, pass identity indices
-  *   (0,1,2,...).
-  * @param asset
-  *   which balance array to debit/credit
-  * @param mechanism
-  *   audit trail — which mechanism produced this flow
+  * Two variants for the two fundamental flow patterns in SFC-ABM:
+  *   - Scatter (N:M): iterate over senders — HH→Bank, Firm→Gov (tax)
+  *   - Broadcast (1:N): iterate over receivers — Gov→HH (transfers), ZUS→HH (pensions)
   */
-case class BatchedFlow(
-    from: EntitySector,
-    to: EntitySector,
-    amounts: Array[Long],
-    targetIndices: Array[Int],
-    asset: AssetType,
-    mechanism: Mechanism
-):
-  require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")
+sealed trait BatchedFlow:
+  def from: EntitySector
+  def to: EntitySector
+  def asset: AssetType
+  def mechanism: Mechanism
+
+object BatchedFlow:
+
+  /** N:M flow — amounts indexed by sender. Each sender pays their assigned target.
+    *
+    * amounts(42) = how much sender #42 pays. targetIndices(42) = which receiver gets it. amounts.length == sectorSize(from).
+    */
+  case class Scatter(
+      from: EntitySector,
+      to: EntitySector,
+      amounts: Array[Long],
+      targetIndices: Array[Int],
+      asset: AssetType,
+      mechanism: Mechanism
+  ) extends BatchedFlow:
+    require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")
+
+  /** 1:N flow — amounts indexed by receiver. Single sender pays all.
+    *
+    * amounts(42) = how much receiver #42 gets. fromIndex = which sender pays. amounts.length == number of receivers (may be <
+    * sectorSize(to) if sparse). totalDebit is aggregated in one shot — avoids cache thrashing on fromStore.
+    */
+  case class Broadcast(
+      from: EntitySector,
+      fromIndex: Int,
+      to: EntitySector,
+      amounts: Array[Long],
+      targetIndices: Array[Int],
+      asset: AssetType,
+      mechanism: Mechanism
+  ) extends BatchedFlow:
+    require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")

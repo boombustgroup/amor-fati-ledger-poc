@@ -12,91 +12,125 @@ import org.scalacheck.Gen
   */
 class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
-  private val NumAgentsFrom = 20
-  private val NumAgentsTo   = 5
-  private val SectorFrom    = EntitySector.Households
-  private val SectorTo      = EntitySector.Banks
-  private val Asset         = AssetType.DemandDeposit
+  private val NumHH    = 20
+  private val NumBanks = 5
+  private val HH       = EntitySector.Households
+  private val Banks    = EntitySector.Banks
+  private val Funds    = EntitySector.Funds
+  private val Asset    = AssetType.DemandDeposit
 
-  private val genAmount      = Gen.choose(0L, 1000000L)
-  private val genTargetIndex = Gen.choose(0, NumAgentsTo - 1)
+  // --- Scatter (N:M) tests ---
 
-  private val genBatchedFlow = for
-    amounts <- Gen.listOfN(NumAgentsFrom, genAmount).map(_.toArray)
-    targets <- Gen.listOfN(NumAgentsFrom, genTargetIndex).map(_.toArray)
-  yield BatchedFlow(SectorFrom, SectorTo, amounts, targets, Asset, Mechanism.HhConsumption)
+  private val genScatterFlow = for
+    amounts <- Gen.listOfN(NumHH, Gen.choose(0L, 1000000L)).map(_.toArray)
+    targets <- Gen.listOfN(NumHH, Gen.choose(0, NumBanks - 1)).map(_.toArray)
+  yield BatchedFlow.Scatter(HH, Banks, amounts, targets, Asset, Mechanism.HhConsumption)
 
-  private val genInitBalance = Gen.choose(-10000000L, 10000000L)
-
-  /** Convert a BatchedFlow to individual Flow objects for the pure interpreter. */
-  private def toIndividualFlows(batch: BatchedFlow, fromOffset: Int, toOffset: Int): Vector[Flow] =
+  private def scatterToFlows(batch: BatchedFlow.Scatter, fromOff: Int, toOff: Int): Vector[Flow] =
     batch.amounts.indices.flatMap { i =>
       val amount = batch.amounts(i)
-      val fromId = fromOffset + i
-      val toId   = toOffset + batch.targetIndices(i)
+      val fromId = fromOff + i
+      val toId   = toOff + batch.targetIndices(i)
       if amount != 0L && fromId != toId then Some(Flow(fromId, toId, amount, batch.mechanism.ordinal))
       else None
     }.toVector
 
-  "ImperativeInterpreter" should "produce identical results to pure Interpreter for single batch" in {
-    forAll(genBatchedFlow) { batch =>
-      // Pure path: Map-based
-      val fromOffset  = 0
-      val toOffset    = NumAgentsFrom // banks start after households in flat ID space
-      val initialPure = Map.empty[Int, Long]
-      val flows       = toIndividualFlows(batch, fromOffset, toOffset)
-      val pureResult  = Interpreter.applyAll(initialPure, flows)
+  "Scatter" should "produce identical results to pure Interpreter" in {
+    forAll(genScatterFlow) { batch =>
+      val flows      = scatterToFlows(batch, 0, NumHH)
+      val pureResult = Interpreter.applyAll(Map.empty[Int, Long], flows)
 
-      // Imperative path: Array-based
-      val state = new MutableWorldState(Map(SectorFrom -> NumAgentsFrom, SectorTo -> NumAgentsTo))
+      val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
       ImperativeInterpreter.applyBatch(state, batch)
 
-      // Compare: every from-sector balance must match
-      (0 until NumAgentsFrom).foreach { i =>
-        state.balance(SectorFrom, Asset, i) shouldBe pureResult.getOrElse(fromOffset + i, 0L)
-      }
-      // Compare: every to-sector balance must match
-      (0 until NumAgentsTo).foreach { i =>
-        state.balance(SectorTo, Asset, i) shouldBe pureResult.getOrElse(toOffset + i, 0L)
-      }
+      (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
+      (0 until NumBanks).foreach(i => state.balance(Banks, Asset, i) shouldBe pureResult.getOrElse(NumHH + i, 0L))
+    }
+  }
+
+  it should "preserve total wealth" in {
+    forAll(genScatterFlow) { batch =>
+      val state   = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
+      val fromArr = state.getBalances(HH, Asset)
+      (0 until NumHH).foreach(i => fromArr(i) = 1000000L)
+      val before = state.totalForAsset(Asset)
+
+      ImperativeInterpreter.applyBatch(state, batch)
+
+      state.totalForAsset(Asset) shouldBe before
     }
   }
 
   it should "produce identical results for multiple sequential batches" in {
-    val genBatches = Gen.listOfN(5, genBatchedFlow).map(_.toVector)
+    val genBatches = Gen.listOfN(5, genScatterFlow).map(_.toVector)
     forAll(genBatches) { batches =>
-      // Pure path
-      val fromOffset = 0
-      val toOffset   = NumAgentsFrom
-      val allFlows   = batches.flatMap(b => toIndividualFlows(b, fromOffset, toOffset))
+      val allFlows   = batches.flatMap(b => scatterToFlows(b, 0, NumHH))
       val pureResult = Interpreter.applyAll(Map.empty[Int, Long], allFlows)
 
-      // Imperative path
-      val state = new MutableWorldState(Map(SectorFrom -> NumAgentsFrom, SectorTo -> NumAgentsTo))
+      val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
       ImperativeInterpreter.applyAll(state, batches)
 
-      // Compare
-      (0 until NumAgentsFrom).foreach { i =>
-        state.balance(SectorFrom, Asset, i) shouldBe pureResult.getOrElse(fromOffset + i, 0L)
-      }
-      (0 until NumAgentsTo).foreach { i =>
-        state.balance(SectorTo, Asset, i) shouldBe pureResult.getOrElse(toOffset + i, 0L)
-      }
+      (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
+      (0 until NumBanks).foreach(i => state.balance(Banks, Asset, i) shouldBe pureResult.getOrElse(NumHH + i, 0L))
     }
   }
 
-  it should "preserve total wealth (conservation)" in {
-    forAll(genBatchedFlow) { batch =>
-      val state = new MutableWorldState(Map(SectorFrom -> NumAgentsFrom, SectorTo -> NumAgentsTo))
+  // --- Broadcast (1:N) tests ---
 
-      // Set some initial balances
-      val fromArr = state.getBalances(SectorFrom, Asset)
-      (0 until NumAgentsFrom).foreach(i => fromArr(i) = 1000000L)
-      val totalBefore = state.totalForAsset(Asset)
+  private val NumFunds = 7
+  private val ZusIndex = 0
+  private val FundsOff = NumHH + NumBanks // offset in flat ID space
+
+  private val genBroadcastFlow = for
+    amounts <- Gen.listOfN(NumHH, Gen.choose(0L, 100000L)).map(_.toArray)
+    targets = (0 until NumHH).toArray // identity: each HH gets their own amount
+  yield BatchedFlow.Broadcast(Funds, ZusIndex, HH, amounts, targets, Asset, Mechanism.ZusPension)
+
+  private def broadcastToFlows(batch: BatchedFlow.Broadcast, fromOff: Int, toOff: Int): Vector[Flow] =
+    batch.amounts.indices.flatMap { i =>
+      val amount = batch.amounts(i)
+      val fromId = fromOff + batch.fromIndex
+      val toId   = toOff + batch.targetIndices(i)
+      if amount != 0L && fromId != toId then Some(Flow(fromId, toId, amount, batch.mechanism.ordinal))
+      else None
+    }.toVector
+
+  "Broadcast" should "produce identical results to pure Interpreter" in {
+    forAll(genBroadcastFlow) { batch =>
+      val flows      = broadcastToFlows(batch, FundsOff, 0)
+      val pureResult = Interpreter.applyAll(Map.empty[Int, Long], flows)
+
+      val state = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+      ImperativeInterpreter.applyBatch(state, batch)
+
+      (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
+      state.balance(Funds, Asset, ZusIndex) shouldBe pureResult.getOrElse(FundsOff + ZusIndex, 0L)
+    }
+  }
+
+  it should "preserve total wealth" in {
+    forAll(genBroadcastFlow) { batch =>
+      val state  = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+      val zusArr = state.getBalances(Funds, Asset)
+      zusArr(ZusIndex) = 100000000L // ZUS has 10K PLN budget
+      val before = state.totalForAsset(Asset)
 
       ImperativeInterpreter.applyBatch(state, batch)
-      val totalAfter = state.totalForAsset(Asset)
 
-      totalAfter shouldBe totalBefore
+      state.totalForAsset(Asset) shouldBe before
     }
+  }
+
+  it should "debit sender exactly once (totalDebit aggregation)" in {
+    val amounts = Array(10000L, 20000L, 30000L)
+    val targets = Array(0, 1, 2)
+    val batch   = BatchedFlow.Broadcast(Funds, ZusIndex, HH, amounts, targets, Asset, Mechanism.ZusPension)
+
+    val state = new MutableWorldState(Map(HH -> 3, Funds -> NumFunds))
+    ImperativeInterpreter.applyBatch(state, batch)
+
+    state.balance(Funds, Asset, ZusIndex) shouldBe -60000L
+    state.balance(HH, Asset, 0) shouldBe 10000L
+    state.balance(HH, Asset, 1) shouldBe 20000L
+    state.balance(HH, Asset, 2) shouldBe 30000L
   }

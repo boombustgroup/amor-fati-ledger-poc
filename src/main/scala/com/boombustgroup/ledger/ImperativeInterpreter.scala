@@ -11,18 +11,30 @@ package com.boombustgroup.ledger
 object ImperativeInterpreter:
 
   /** Apply a single batched flow. O(N) where N = amounts.length. */
-  def applyBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
-    val fromStore = state.getBalances(batch.from, batch.asset)
-    val toStore   = state.getBalances(batch.to, batch.asset)
-    val amounts   = batch.amounts
-    val targets   = batch.targetIndices
-    var i         = 0
-    while i < amounts.length do
-      val amount = amounts(i)
-      if amount != 0L then
-        fromStore(i) -= amount
-        toStore(targets(i)) += amount
-      i += 1
+  def applyBatch(state: MutableWorldState, batch: BatchedFlow): Unit = batch match
+    case BatchedFlow.Scatter(from, to, amounts, targets, asset, _) =>
+      val fromStore = state.getBalances(from, asset)
+      val toStore   = state.getBalances(to, asset)
+      var i         = 0
+      while i < amounts.length do
+        val amount = amounts(i)
+        if amount != 0L then
+          fromStore(i) -= amount
+          toStore(targets(i)) += amount
+        i += 1
+
+    case BatchedFlow.Broadcast(from, fromIdx, to, amounts, targets, asset, _) =>
+      val fromStore  = state.getBalances(from, asset)
+      val toStore    = state.getBalances(to, asset)
+      var i          = 0
+      var totalDebit = 0L
+      while i < amounts.length do
+        val amount = amounts(i)
+        if amount != 0L then
+          totalDebit += amount
+          toStore(targets(i)) += amount
+        i += 1
+      fromStore(fromIdx) -= totalDebit
 
   /** Apply a sequence of batched flows. */
   def applyAll(state: MutableWorldState, flows: Vector[BatchedFlow]): Unit =
