@@ -10,7 +10,7 @@ sealed trait BatchedFlow:
   def from: EntitySector
   def to: EntitySector
   def asset: AssetType
-  def mechanism: Mechanism
+  def mechanism: Int
 
 object BatchedFlow:
 
@@ -24,7 +24,7 @@ object BatchedFlow:
       amounts: Array[Long],
       targetIndices: Array[Int],
       asset: AssetType,
-      mechanism: Mechanism
+      mechanism: Int
   ) extends BatchedFlow:
     require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")
 
@@ -40,6 +40,6 @@ object BatchedFlow:
       amounts: Array[Long],
       targetIndices: Array[Int],
       asset: AssetType,
-      mechanism: Mechanism
+      mechanism: Int
   ) extends BatchedFlow:
     require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")

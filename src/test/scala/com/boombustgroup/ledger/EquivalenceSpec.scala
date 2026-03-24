@@ -24,14 +24,14 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   private val genScatterFlow = for
     amounts <- Gen.listOfN(NumHH, Gen.choose(0L, 1000000L)).map(_.toArray)
     targets <- Gen.listOfN(NumHH, Gen.choose(0, NumBanks - 1)).map(_.toArray)
-  yield BatchedFlow.Scatter(HH, Banks, amounts, targets, Asset, Mechanism.HhConsumption)
+  yield BatchedFlow.Scatter(HH, Banks, amounts, targets, Asset, 1)
 
   private def scatterToFlows(batch: BatchedFlow.Scatter, fromOff: Int, toOff: Int): Vector[Flow] =
     batch.amounts.indices.flatMap { i =>
       val amount = batch.amounts(i)
       val fromId = fromOff + i
       val toId   = toOff + batch.targetIndices(i)
-      if amount != 0L && fromId != toId then Some(Flow(fromId, toId, amount, batch.mechanism.ordinal))
+      if amount != 0L && fromId != toId then Some(Flow(fromId, toId, amount, batch.mechanism))
       else None
     }.toVector
 
@@ -84,14 +84,14 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   private val genBroadcastFlow = for
     amounts <- Gen.listOfN(NumHH, Gen.choose(0L, 100000L)).map(_.toArray)
     targets = (0 until NumHH).toArray // identity: each HH gets their own amount
-  yield BatchedFlow.Broadcast(Funds, ZusIndex, HH, amounts, targets, Asset, Mechanism.ZusPension)
+  yield BatchedFlow.Broadcast(Funds, ZusIndex, HH, amounts, targets, Asset, 2)
 
   private def broadcastToFlows(batch: BatchedFlow.Broadcast, fromOff: Int, toOff: Int): Vector[Flow] =
     batch.amounts.indices.flatMap { i =>
       val amount = batch.amounts(i)
       val fromId = fromOff + batch.fromIndex
       val toId   = toOff + batch.targetIndices(i)
-      if amount != 0L && fromId != toId then Some(Flow(fromId, toId, amount, batch.mechanism.ordinal))
+      if amount != 0L && fromId != toId then Some(Flow(fromId, toId, amount, batch.mechanism))
       else None
     }.toVector
 
@@ -124,7 +124,7 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
   it should "debit sender exactly once (totalDebit aggregation)" in {
     val amounts = Array(10000L, 20000L, 30000L)
     val targets = Array(0, 1, 2)
-    val batch   = BatchedFlow.Broadcast(Funds, ZusIndex, HH, amounts, targets, Asset, Mechanism.ZusPension)
+    val batch   = BatchedFlow.Broadcast(Funds, ZusIndex, HH, amounts, targets, Asset, 2)
 
     val state = new MutableWorldState(Map(HH -> 3, Funds -> NumFunds))
     ImperativeInterpreter.applyBatch(state, batch)
