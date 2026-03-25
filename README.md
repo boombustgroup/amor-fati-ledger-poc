@@ -36,7 +36,8 @@ The chain of trust:
 
 ```
 Stainless/Z3 proves → Verified.scala (reference model)
-EquivalenceSpec tests → ImperativeInterpreter == Interpreter (bit-for-bit)
+EquivalenceSpec tests → RuntimeInterpreterReference == Interpreter (bit-for-bit)
+EquivalenceSpec tests → ImperativeInterpreter == RuntimeInterpreterReference (bit-for-bit)
 InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala
 ```
 
