@@ -12,8 +12,10 @@ import stainless.annotation._
 object Verified:
 
   case class VFlow(from: BigInt, to: BigInt, amount: BigInt)
+  case class RuntimeFlow(from: Int, to: Int, amount: Long)
 
   def validFlow(f: VFlow): Boolean = f.from != f.to
+  def validRuntimeFlow(f: RuntimeFlow): Boolean = f.from != f.to && f.amount >= 0L
 
   def allValid(flows: List[VFlow]): Boolean = flows match
     case Nil()       => true
@@ -34,6 +36,24 @@ object Verified:
     forall((k: BigInt) =>
       (k != flow.from && k != flow.to) ==>
         (res.getOrElse(k, BigInt(0)) == balances.getOrElse(k, BigInt(0)))
+    )
+  }
+
+  def applyRuntimeFlow(balances: Map[Int, Long], flow: RuntimeFlow): Map[Int, Long] = {
+    require(validRuntimeFlow(flow))
+    val currentFrom = balances.getOrElse(flow.from, 0L)
+    val currentTo   = balances.getOrElse(flow.to, 0L)
+    require(currentFrom >= Long.MinValue + flow.amount)
+    require(currentTo <= Long.MaxValue - flow.amount)
+    balances
+      .updated(flow.from, currentFrom - flow.amount)
+      .updated(flow.to, currentTo + flow.amount)
+  } ensuring { res =>
+    (res.getOrElse(flow.from, 0L) == balances.getOrElse(flow.from, 0L) - flow.amount) &&
+    (res.getOrElse(flow.to, 0L) == balances.getOrElse(flow.to, 0L) + flow.amount) &&
+    forall((k: Int) =>
+      (k != flow.from && k != flow.to) ==>
+        (res.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
     )
   }
 
