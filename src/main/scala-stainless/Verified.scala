@@ -153,6 +153,38 @@ object Verified:
     require(b1To <= Long.MaxValue - f1.amount)
     require(b2From >= Long.MinValue + f2.amount)
     require(b2To <= Long.MaxValue - f2.amount)
+
+    val afterF1 = applyRuntimeFlow(balances, f1)
+    val afterF2 = applyRuntimeFlow(balances, f2)
+
+    assert(afterF1.getOrElse(f2.from, 0L) == b2From)
+    assert(afterF1.getOrElse(f2.to, 0L) == b2To)
+    assert(afterF2.getOrElse(f1.from, 0L) == b1From)
+    assert(afterF2.getOrElse(f1.to, 0L) == b1To)
+
+    val order12 = applyRuntimeFlow(afterF1, f2)
+    val order21 = applyRuntimeFlow(afterF2, f1)
+
+    assert(order12.getOrElse(f1.from, 0L) == b1From - f1.amount)
+    assert(order21.getOrElse(f1.from, 0L) == b1From - f1.amount)
+    assert(order12.getOrElse(f1.to, 0L) == b1To + f1.amount)
+    assert(order21.getOrElse(f1.to, 0L) == b1To + f1.amount)
+    assert(order12.getOrElse(f2.from, 0L) == b2From - f2.amount)
+    assert(order21.getOrElse(f2.from, 0L) == b2From - f2.amount)
+    assert(order12.getOrElse(f2.to, 0L) == b2To + f2.amount)
+    assert(order21.getOrElse(f2.to, 0L) == b2To + f2.amount)
+    assert(
+      forall((k: Int) =>
+        (k != f1.from && k != f1.to && k != f2.from && k != f2.to) ==>
+          (order12.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+      )
+    )
+    assert(
+      forall((k: Int) =>
+        (k != f1.from && k != f1.to && k != f2.from && k != f2.to) ==>
+          (order21.getOrElse(k, 0L) == balances.getOrElse(k, 0L))
+      )
+    )
   } ensuring { _ =>
     applyRuntimeFlow(applyRuntimeFlow(balances, f1), f2) ==
       applyRuntimeFlow(applyRuntimeFlow(balances, f2), f1)
