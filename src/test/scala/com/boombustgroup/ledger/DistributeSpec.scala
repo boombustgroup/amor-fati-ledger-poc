@@ -56,3 +56,14 @@ class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyCh
     result.sum shouldBe 2L
     result.forall(_ >= 0L) shouldBe true
   }
+
+  it should "match the pure reference model" in {
+    val genTotal  = Gen.choose(1L, 10000000000L)
+    val genSize   = Gen.choose(1, 20)
+    val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)).map(_.toArray))
+    forAll(genTotal, genShares) { (total, shares) =>
+      val result    = Distribute.distribute(total, shares)
+      val reference = DistributeReference.distribute(total, shares.toList).toArray
+      result shouldBe reference
+    }
+  }

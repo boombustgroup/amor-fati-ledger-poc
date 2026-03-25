@@ -30,7 +30,7 @@ Production implementations are **not themselves formally verified**. They are te
 
 - **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property)
 - **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with `Interpreter.scala` via `EquivalenceSpec`, with runtime validation of batch dimensions, indices, and non-negative amounts
-- **`Distribute.scala`** (N-way distribution with residual plug) — property-based tests checking `sum == total` for arbitrary N
+- **`Distribute.scala`** (N-way distribution with floor-based residual plug) — property-based tests checking `sum == total`, non-negativity, and exact equivalence with a pure reference model
 
 The chain of trust:
 
