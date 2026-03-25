@@ -176,6 +176,39 @@ object Verified:
     (total * share) / shareSum >= BigInt(0)
   }
 
+  def floorDivAddUpper(a: BigInt, b: BigInt, d: BigInt): Unit = {
+    require(a >= BigInt(0))
+    require(b >= BigInt(0))
+    require(d > BigInt(0))
+  } ensuring { _ =>
+    a / d + b / d <= (a + b) / d
+  }
+
+  def listSumNonNegative(xs: List[BigInt]): Unit = {
+    require(allNonNegative(xs))
+    xs match {
+      case Nil() =>
+      case Cons(_, tail) =>
+        listSumNonNegative(tail)
+    }
+  } ensuring { _ =>
+    listSum(xs) >= BigInt(0)
+  }
+
+  def mulNonNegative(a: BigInt, b: BigInt): Unit = {
+    require(a >= BigInt(0))
+    require(b >= BigInt(0))
+  } ensuring { _ =>
+    a * b >= BigInt(0)
+  }
+
+  def mulDivSelf(a: BigInt, d: BigInt): Unit = {
+    require(a >= BigInt(0))
+    require(d > BigInt(0))
+  } ensuring { _ =>
+    (a * d) / d == a
+  }
+
   def mapFloorShares(total: BigInt, shareSum: BigInt, shares: List[BigInt]): List[BigInt] = {
     require(total >= BigInt(0))
     require(shareSum > BigInt(0))
@@ -191,6 +224,22 @@ object Verified:
     allNonNegative(res)
   }
 
+  def mapFloorSharesSumUpper(total: BigInt, shareSum: BigInt, shares: List[BigInt]): Unit = {
+    require(total >= BigInt(0))
+    require(shareSum > BigInt(0))
+    require(allNonNegative(shares))
+    shares match {
+      case Nil() =>
+      case Cons(head, tail) =>
+        mapFloorSharesSumUpper(total, shareSum, tail)
+        listSumNonNegative(tail)
+        mulNonNegative(total, listSum(tail))
+        floorDivAddUpper(total * head, total * listSum(tail), shareSum)
+    }
+  } ensuring { _ =>
+    listSum(mapFloorShares(total, shareSum, shares)) <= (total * listSum(shares)) / shareSum
+  }
+
   def floorScaledSharesFold(total: BigInt, shareSum: BigInt, shares: List[BigInt]): List[BigInt] = {
     require(total >= BigInt(0))
     require(shareSum > BigInt(0))
@@ -198,6 +247,22 @@ object Verified:
     require(shareSum == listSum(shares))
     mapFloorShares(total, shareSum, shares)
   } ensuring { res =>
+    allNonNegative(res)
+  }
+
+  def distributeProportionalFloorResidual(total: BigInt, shares: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(shares != Nil())
+    require(allNonNegative(shares))
+    require(listSum(shares) > BigInt(0))
+    val shareSum = listSum(shares)
+    mapFloorSharesSumUpper(total, shareSum, shares)
+    mulDivSelf(total, shareSum)
+    val floored = mapFloorShares(total, shareSum, shares)
+    assert(listSum(floored) <= total)
+    distributeN(total, floored)
+  } ensuring { res =>
+    listSum(res) == total &&
     allNonNegative(res)
   }
 
