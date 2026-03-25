@@ -44,7 +44,7 @@ InterpreterPropertySpec tests → Interpreter checks analogous properties to Ver
 
 ### Layer 3: Not yet formally verified
 
-- Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`, but full proportional `Distribute.scala` with banker rounding is still only tested
+- Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`; production `Distribute.scala` now uses the same floor-with-residual shape, but is still only tested, not formally linked to the model
 - Batch dimensions, sender/target index bounds, and non-negative amounts — enforced at runtime by `ImperativeInterpreter.validateBatch`, not formally verified
 - `MutableWorldState` — tested via equivalence, not formally verified (mutable state is hard to verify in SMT solvers)
 - Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet formalized in Stainless
