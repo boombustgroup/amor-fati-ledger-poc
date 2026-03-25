@@ -12,13 +12,14 @@ import org.scalacheck.Gen
   */
 class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
-  private val NumHH        = 20
-  private val NumBanks     = 5
-  private val HH           = EntitySector.Households
-  private val Banks        = EntitySector.Banks
-  private val Funds        = EntitySector.Funds
-  private val Asset        = AssetType.DemandDeposit
-  private val HhBanksSizes = Map(HH -> NumHH, Banks -> NumBanks)
+  private val NumHH          = 20
+  private val NumBanks       = 5
+  private val HH             = EntitySector.Households
+  private val Banks          = EntitySector.Banks
+  private val Funds          = EntitySector.Funds
+  private val Asset          = AssetType.DemandDeposit
+  private val HhBanksSizes   = Map(HH -> NumHH, Banks -> NumBanks)
+  private val HhBanksOffsets = Map(HH -> 0, Banks -> NumHH)
 
   // --- Scatter (N:M) tests ---
 
@@ -41,11 +42,13 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       val flows      = scatterToFlows(batch, 0, NumHH)
       val pureResult = Interpreter.applyAll(Map.empty[Int, Long], flows)
       val refResult  = RuntimeInterpreterReference.applyBatch(HhBanksSizes, Map.empty, batch)
+      val refFlat    = RuntimeInterpreterReference.snapshotToFlatMap(refResult, HhBanksOffsets, Asset)
 
       val state = new MutableWorldState(HhBanksSizes)
       ImperativeInterpreter.applyBatch(state, batch)
 
       state.snapshot shouldBe refResult
+      refFlat shouldBe pureResult
       (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
       (0 until NumBanks).foreach(i => state.balance(Banks, Asset, i) shouldBe pureResult.getOrElse(NumHH + i, 0L))
     }
@@ -70,11 +73,13 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       val allFlows   = batches.flatMap(b => scatterToFlows(b, 0, NumHH))
       val pureResult = Interpreter.applyAll(Map.empty[Int, Long], allFlows)
       val refResult  = RuntimeInterpreterReference.applyAll(HhBanksSizes, Map.empty, batches)
+      val refFlat    = RuntimeInterpreterReference.snapshotToFlatMap(refResult, HhBanksOffsets, Asset)
 
       val state = new MutableWorldState(HhBanksSizes)
       ImperativeInterpreter.applyAll(state, batches)
 
       state.snapshot shouldBe refResult
+      refFlat shouldBe pureResult
       (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
       (0 until NumBanks).foreach(i => state.balance(Banks, Asset, i) shouldBe pureResult.getOrElse(NumHH + i, 0L))
     }
@@ -112,10 +117,11 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
 
   // --- Broadcast (1:N) tests ---
 
-  private val NumFunds     = 7
-  private val ZusIndex     = 0
-  private val FundsOff     = NumHH + NumBanks // offset in flat ID space
-  private val HhFundsSizes = Map(HH -> NumHH, Funds -> NumFunds)
+  private val NumFunds       = 7
+  private val ZusIndex       = 0
+  private val FundsOff       = NumHH + NumBanks // offset in flat ID space
+  private val HhFundsSizes   = Map(HH -> NumHH, Funds -> NumFunds)
+  private val HhFundsOffsets = Map(HH -> 0, Funds -> FundsOff)
 
   private val genBroadcastFlow = for
     amounts <- Gen.listOfN(NumHH, Gen.choose(0L, 100000L)).map(_.toArray)
@@ -136,11 +142,13 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       val flows      = broadcastToFlows(batch, FundsOff, 0)
       val pureResult = Interpreter.applyAll(Map.empty[Int, Long], flows)
       val refResult  = RuntimeInterpreterReference.applyBatch(HhFundsSizes, Map.empty, batch)
+      val refFlat    = RuntimeInterpreterReference.snapshotToFlatMap(refResult, HhFundsOffsets, Asset)
 
       val state = new MutableWorldState(HhFundsSizes)
       ImperativeInterpreter.applyBatch(state, batch)
 
       state.snapshot shouldBe refResult
+      refFlat shouldBe pureResult
       (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
       state.balance(Funds, Asset, ZusIndex) shouldBe pureResult.getOrElse(FundsOff + ZusIndex, 0L)
     }
@@ -179,11 +187,13 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
       val allFlows   = batches.flatMap(b => broadcastToFlows(b, FundsOff, 0))
       val pureResult = Interpreter.applyAll(Map.empty[Int, Long], allFlows)
       val refResult  = RuntimeInterpreterReference.applyAll(HhFundsSizes, Map.empty, batches)
+      val refFlat    = RuntimeInterpreterReference.snapshotToFlatMap(refResult, HhFundsOffsets, Asset)
 
       val state = new MutableWorldState(HhFundsSizes)
       ImperativeInterpreter.applyAll(state, batches)
 
       state.snapshot shouldBe refResult
+      refFlat shouldBe pureResult
       (0 until NumHH).foreach(i => state.balance(HH, Asset, i) shouldBe pureResult.getOrElse(i, 0L))
       state.balance(Funds, Asset, ZusIndex) shouldBe pureResult.getOrElse(FundsOff + ZusIndex, 0L)
     }

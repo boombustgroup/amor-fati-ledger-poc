@@ -12,6 +12,16 @@ object RuntimeInterpreterReference:
   private def key(sector: EntitySector, asset: AssetType, index: Int): BalanceKey =
     (sector, asset, index)
 
+  def snapshotToFlatMap(
+      snapshot: BalanceState,
+      sectorOffsets: Map[EntitySector, Int],
+      asset: AssetType
+  ): Map[Int, Long] =
+    snapshot.collect {
+      case ((sector, a, index), balance) if a == asset =>
+        (sectorOffsets(sector) + index) -> balance
+    }
+
   private def update(state: BalanceState, sector: EntitySector, asset: AssetType, index: Int, delta: Long): BalanceState =
     val k       = key(sector, asset, index)
     val updated = state.getOrElse(k, 0L) + delta
