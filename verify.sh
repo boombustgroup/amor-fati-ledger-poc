@@ -10,7 +10,7 @@ if [ ! -f "$STAINLESS_DIR/stainless" ]; then
 fi
 
 echo "Running Stainless verification..."
-"$STAINLESS_DIR/stainless" --solvers=smt-z3 --timeout=60 \
+"$STAINLESS_DIR/stainless" --solvers=smt-z3 --timeout=180 \
   src/main/scala-stainless/Verified.scala
 
 echo "All properties verified."

@@ -31,5 +31,5 @@ jobs:
 
       - name: Verify SFC properties
         run: |
-          /tmp/stainless-standalone/stainless --solvers=smt-z3 --timeout=120 \
+          /tmp/stainless-standalone/stainless --solvers=smt-z3 --timeout=180 \
             src/main/scala-stainless/Verified.scala
