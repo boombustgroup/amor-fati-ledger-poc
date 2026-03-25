@@ -131,6 +131,29 @@ object Verified:
     allNonNegative(res)
   }
 
+  def scaleList(factor: BigInt, xs: List[BigInt]): List[BigInt] = {
+    require(factor >= BigInt(0))
+    xs match
+      case Nil()       => Nil()
+      case Cons(x, tl) => Cons(factor * x, scaleList(factor, tl))
+  } ensuring { res =>
+    listSum(res) == factor * listSum(xs) &&
+    (allNonNegative(xs) ==> allNonNegative(res))
+  }
+
+  def distributeProportionalExact(total: BigInt, shares: List[BigInt]): List[BigInt] = {
+    require(total >= BigInt(0))
+    require(shares != Nil())
+    require(allNonNegative(shares))
+    require(listSum(shares) > BigInt(0))
+    require(total % listSum(shares) == BigInt(0))
+    val unit = total / listSum(shares)
+    scaleList(unit, shares)
+  } ensuring { res =>
+    listSum(res) == total &&
+    allNonNegative(res)
+  }
+
   // --- Property 5: Commutativity of disjoint flows ---
 
   def commutativity(
