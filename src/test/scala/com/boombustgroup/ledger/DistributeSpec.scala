@@ -46,6 +46,13 @@ class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyCh
       whenever(total >= 0) {
         val result = Distribute.distribute(total, shares)
         result.sum shouldBe total
+        result.forall(_ >= 0L) shouldBe true
       }
     }
+  }
+
+  it should "not produce negative residuals for small equal shares" in {
+    val result = Distribute.distribute(2L, Array(1L, 1L, 1L, 1L))
+    result.sum shouldBe 2L
+    result.forall(_ >= 0L) shouldBe true
   }
