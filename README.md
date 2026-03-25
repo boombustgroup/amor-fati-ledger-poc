@@ -28,7 +28,7 @@ This is the reference model — primarily pure `Map[BigInt, BigInt]`, plus a ver
 
 Production implementations are **not themselves formally verified**. They are tested for correctness:
 
-- **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property)
+- **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property), plus a test bridge against an embedded `BigInt` reference-model shape for non-overflow inputs
 - **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with both `Interpreter.scala` and a pure runtime reference model via `EquivalenceSpec`, with runtime validation of batch dimensions, indices, and non-negative amounts
 - **`Distribute.scala`** (N-way distribution with floor-based residual plug) — property-based tests checking `sum == total`, non-negativity, and exact equivalence with a pure reference model
 
@@ -36,6 +36,7 @@ The chain of trust:
 
 ```
 Stainless/Z3 proves → Verified.scala (reference model)
+InterpreterVerifiedBridgeSpec tests → Interpreter == embedded BigInt reference model (non-overflow inputs)
 EquivalenceSpec tests → RuntimeInterpreterReference == Interpreter (bit-for-bit)
 EquivalenceSpec tests → ImperativeInterpreter == RuntimeInterpreterReference (bit-for-bit)
 InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala
