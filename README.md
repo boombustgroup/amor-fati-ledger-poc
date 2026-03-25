@@ -10,7 +10,7 @@ The project has three layers with different levels of assurance:
 
 ### Layer 1: Formally verified reference model (Stainless + Z3)
 
-`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. 216/216 verification conditions valid.
+`src/main/scala-stainless/Verified.scala` — mathematical proofs verified by Z3 SMT solver. The latest verification run completes with all generated conditions valid.
 
 | Property | What it guarantees | Proved by |
 |---|---|---|
