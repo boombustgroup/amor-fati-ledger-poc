@@ -21,6 +21,21 @@ object Verified:
     case Nil()       => true
     case Cons(f, tl) => validFlow(f) && allValid(tl)
 
+  def allValidRuntime(flows: List[RuntimeFlow]): Boolean = flows match
+    case Nil()       => true
+    case Cons(f, tl) => validRuntimeFlow(f) && allValidRuntime(tl)
+
+  def canApplyRuntimeFlow(balances: Map[Int, Long], flow: RuntimeFlow): Boolean =
+    validRuntimeFlow(flow) &&
+      balances.getOrElse(flow.from, 0L) >= Long.MinValue + flow.amount &&
+      balances.getOrElse(flow.to, 0L) <= Long.MaxValue - flow.amount
+
+  def canApplyRuntimeFlowList(balances: Map[Int, Long], flows: List[RuntimeFlow]): Boolean = flows match
+    case Nil() => true
+    case Cons(f, rest) =>
+      canApplyRuntimeFlow(balances, f) &&
+        canApplyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
+
   // --- Property 1+2: Flow conservation + Frame condition ---
 
   def applyFlow(balances: Map[BigInt, BigInt], flow: VFlow): Map[BigInt, BigInt] = {
@@ -86,6 +101,13 @@ object Verified:
     flows match
       case Nil()         => balances
       case Cons(f, rest) => applyFlowList(applyFlow(balances, f), rest)
+  }
+
+  def applyRuntimeFlowList(balances: Map[Int, Long], flows: List[RuntimeFlow]): Map[Int, Long] = {
+    require(canApplyRuntimeFlowList(balances, flows))
+    flows match
+      case Nil()         => balances
+      case Cons(f, rest) => applyRuntimeFlowList(applyRuntimeFlow(balances, f), rest)
   }
 
   // --- Property 4: Distribution exactness ---
