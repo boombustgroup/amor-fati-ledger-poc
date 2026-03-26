@@ -102,7 +102,7 @@ src/
 ## Run
 
 ```bash
-# Tests (24 tests, property-based + equivalence)
+# Tests
 sbt test
 
 # Formal verification (requires Stainless standalone + Z3)
