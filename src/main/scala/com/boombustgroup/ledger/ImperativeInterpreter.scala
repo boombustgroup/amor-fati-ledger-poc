@@ -42,6 +42,10 @@ object ImperativeInterpreter:
   def applyValidatedPlan(state: MutableWorldState, plan: ValidatedBatchPlan): Unit =
     applyAll(state, plan.batches)
 
+  /** Preferred high-level entrypoint: validate the batch sequence against the current state snapshot, then execute it. */
+  def planAndApplyAll(state: MutableWorldState, flows: Vector[BatchedFlow]): Either[String, Unit] =
+    ValidatedBatchPlan.fromState(state, flows).map(plan => applyValidatedPlan(state, plan))
+
   /** Apply a single batched flow. O(N) where N = amounts.length. */
   def applyBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
     validateBatch(state, batch)
@@ -70,7 +74,10 @@ object ImperativeInterpreter:
           i += 1
         fromStore(fromIdx) -= totalDebit
 
-  /** Apply a sequence of batched flows. */
+  /** Apply a sequence of batched flows.
+    *
+    * Low-level runtime entrypoint. Prefer `planAndApplyAll` or `applyValidatedPlan` when callers want the validated batch-plan contract.
+    */
   def applyAll(state: MutableWorldState, flows: Vector[BatchedFlow]): Unit =
     var i = 0
     while i < flows.length do
