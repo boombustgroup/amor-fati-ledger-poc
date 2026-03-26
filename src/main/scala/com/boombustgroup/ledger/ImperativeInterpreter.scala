@@ -49,28 +49,24 @@ object ImperativeInterpreter:
   /** Apply a single batched flow. O(N) where N = amounts.length. */
   def applyBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
     validateBatch(state, batch)
-    batch match
-      case BatchedFlow.Scatter(from, to, amounts, targets, asset, _) =>
+    BatchDeltaSemantics.plan(batch) match
+      case BatchDeltaSemantics.ScatterPlan(from, to, asset, deltas) =>
         val fromStore = state.getBalances(from, asset)
         val toStore   = state.getBalances(to, asset)
         var i         = 0
-        while i < amounts.length do
-          val amount = amounts(i)
-          if amount != 0L then
-            fromStore(i) -= amount
-            toStore(targets(i)) += amount
+        while i < deltas.length do
+          val delta = deltas(i)
+          fromStore(delta.senderIndex) -= delta.amount
+          toStore(delta.targetIndex) += delta.amount
           i += 1
 
-      case BatchedFlow.Broadcast(from, fromIdx, to, amounts, targets, asset, _) =>
-        val fromStore  = state.getBalances(from, asset)
-        val toStore    = state.getBalances(to, asset)
-        var i          = 0
-        var totalDebit = 0L
-        while i < amounts.length do
-          val amount = amounts(i)
-          if amount != 0L then
-            totalDebit += amount
-            toStore(targets(i)) += amount
+      case BatchDeltaSemantics.BroadcastPlan(from, to, asset, fromIdx, totalDebit, credits) =>
+        val fromStore = state.getBalances(from, asset)
+        val toStore   = state.getBalances(to, asset)
+        var i         = 0
+        while i < credits.length do
+          val credit = credits(i)
+          toStore(credit.targetIndex) += credit.amount
           i += 1
         fromStore(fromIdx) -= totalDebit
 

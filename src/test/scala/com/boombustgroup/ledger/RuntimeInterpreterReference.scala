@@ -40,28 +40,22 @@ object RuntimeInterpreterReference:
       (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
       batch
     )
-    batch match
-      case BatchedFlow.Scatter(from, to, amounts, targets, asset, _) =>
-        amounts.indices.foldLeft(state) { (acc, i) =>
-          val amount = amounts(i)
-          if amount == 0L then acc
-          else
-            update(
-              update(acc, from, asset, i, -amount),
-              to,
-              asset,
-              targets(i),
-              amount
-            )
+    BatchDeltaSemantics.plan(batch) match
+      case BatchDeltaSemantics.ScatterPlan(from, to, asset, deltas) =>
+        deltas.foldLeft(state) { (acc, delta) =>
+          update(
+            update(acc, from, asset, delta.senderIndex, -delta.amount),
+            to,
+            asset,
+            delta.targetIndex,
+            delta.amount
+          )
         }
 
-      case BatchedFlow.Broadcast(from, fromIdx, to, amounts, targets, asset, _) =>
-        val afterCredits = amounts.indices.foldLeft(state) { (acc, i) =>
-          val amount = amounts(i)
-          if amount == 0L then acc
-          else update(acc, to, asset, targets(i), amount)
+      case BatchDeltaSemantics.BroadcastPlan(from, to, asset, fromIdx, totalDebit, credits) =>
+        val afterCredits = credits.foldLeft(state) { (acc, credit) =>
+          update(acc, to, asset, credit.targetIndex, credit.amount)
         }
-        val totalDebit = amounts.foldLeft(0L)(_ + _)
         update(afterCredits, from, asset, fromIdx, -totalDebit)
 
   def applyAll(sectorSizes: Map[EntitySector, Int], state: BalanceState, flows: Vector[BatchedFlow]): BalanceState =
