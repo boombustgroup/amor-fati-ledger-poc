@@ -13,7 +13,7 @@ import scala.collection.mutable
   * Important runtime boundary:
   *   - this class does not validate per-index reads/writes on its own
   *   - `getBalances` intentionally exposes the backing array for performance
-  *   - callers must uphold sector/index invariants; `ImperativeInterpreter.validateBatch` is the main guardrail for batched flows
+  *   - callers must uphold sector/index invariants; `BatchExecutionContract` is the main batched-flow guardrail
   */
 class MutableWorldState(private val sectorSizes: Map[EntitySector, Int]):
 

@@ -27,41 +27,19 @@ object RuntimeInterpreterReference:
     val updated = state.getOrElse(k, 0L) + delta
     if updated == 0L then state - k else state.updated(k, updated)
 
-  private def validateBatch(sectorSizes: Map[EntitySector, Int], batch: BatchedFlow): Unit = batch match
-    case BatchedFlow.Scatter(from, to, amounts, targets, _, _) =>
-      val fromSize = sectorSizes.getOrElse(from, 1)
-      val toSize   = sectorSizes.getOrElse(to, 1)
-      require(
-        amounts.length == fromSize,
-        s"Scatter amounts.length=${amounts.length} must equal sectorSize($from)=$fromSize"
-      )
-      var i = 0
-      while i < amounts.length do
-        require(amounts(i) >= 0L, s"Scatter amount at index $i is negative: ${amounts(i)}")
-        require(
-          targets(i) >= 0 && targets(i) < toSize,
-          s"Scatter target index at position $i out of bounds: ${targets(i)} for sectorSize($to)=$toSize"
-        )
-        i += 1
-
-    case BatchedFlow.Broadcast(from, fromIdx, to, amounts, targets, _, _) =>
-      val fromSize = sectorSizes.getOrElse(from, 1)
-      val toSize   = sectorSizes.getOrElse(to, 1)
-      require(
-        fromIdx >= 0 && fromIdx < fromSize,
-        s"Broadcast fromIndex=$fromIdx out of bounds for sectorSize($from)=$fromSize"
-      )
-      var i = 0
-      while i < amounts.length do
-        require(amounts(i) >= 0L, s"Broadcast amount at index $i is negative: ${amounts(i)}")
-        require(
-          targets(i) >= 0 && targets(i) < toSize,
-          s"Broadcast target index at position $i out of bounds: ${targets(i)} for sectorSize($to)=$toSize"
-        )
-        i += 1
+  def canApplyBatch(sectorSizes: Map[EntitySector, Int], state: BalanceState, batch: BatchedFlow): Boolean =
+    BatchExecutionContract.canApplyBatch(
+      sector => sectorSizes.getOrElse(sector, 1),
+      (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
+      batch
+    )
 
   def applyBatch(sectorSizes: Map[EntitySector, Int], state: BalanceState, batch: BatchedFlow): BalanceState =
-    validateBatch(sectorSizes, batch)
+    BatchExecutionContract.requireValidBatch(
+      sector => sectorSizes.getOrElse(sector, 1),
+      (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
+      batch
+    )
     batch match
       case BatchedFlow.Scatter(from, to, amounts, targets, asset, _) =>
         amounts.indices.foldLeft(state) { (acc, i) =>

@@ -115,6 +115,52 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
   }
 
+  it should "reject scatter batches that would underflow the sender balance" in {
+    val amounts = Array.fill(NumHH)(0L)
+    val targets = Array.fill(NumHH)(0)
+    amounts(0) = 1L
+    val batch = BatchedFlow.Scatter(
+      HH,
+      Banks,
+      amounts,
+      targets,
+      Asset,
+      MechanismId(1)
+    )
+
+    val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
+    state.getBalances(HH, Asset)(0) = Long.MinValue
+
+    val refState = Map((HH, Asset, 0) -> Long.MinValue)
+    ImperativeInterpreter.canApplyBatch(state, batch) shouldBe false
+    RuntimeInterpreterReference.canApplyBatch(HhBanksSizes, refState, batch) shouldBe false
+    ImperativeInterpreter.applyCheckedBatch(state, batch).isLeft shouldBe true
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
+  }
+
+  it should "reject scatter batches that would overflow the target balance" in {
+    val amounts = Array.fill(NumHH)(0L)
+    val targets = Array.fill(NumHH)(0)
+    amounts(0) = 1L
+    val batch = BatchedFlow.Scatter(
+      HH,
+      Banks,
+      amounts,
+      targets,
+      Asset,
+      MechanismId(1)
+    )
+
+    val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
+    state.getBalances(Banks, Asset)(0) = Long.MaxValue
+
+    val refState = Map((Banks, Asset, 0) -> Long.MaxValue)
+    ImperativeInterpreter.canApplyBatch(state, batch) shouldBe false
+    RuntimeInterpreterReference.canApplyBatch(HhBanksSizes, refState, batch) shouldBe false
+    ImperativeInterpreter.applyCheckedBatch(state, batch).isLeft shouldBe true
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
+  }
+
   // --- Broadcast (1:N) tests ---
 
   private val NumFunds       = 7
@@ -228,5 +274,25 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     )
 
     val state = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+    an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
+  }
+
+  it should "reject broadcast batches whose aggregated debit would overflow Long" in {
+    val batch = BatchedFlow.Broadcast(
+      Funds,
+      ZusIndex,
+      HH,
+      Array(Long.MaxValue, 1L),
+      Array(0, 1),
+      Asset,
+      MechanismId(2)
+    )
+
+    val state    = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+    val refState = Map.empty[(EntitySector, AssetType, Int), Long]
+
+    ImperativeInterpreter.canApplyBatch(state, batch) shouldBe false
+    RuntimeInterpreterReference.canApplyBatch(HhFundsSizes, refState, batch) shouldBe false
+    ImperativeInterpreter.applyCheckedBatch(state, batch).isLeft shouldBe true
     an[IllegalArgumentException] should be thrownBy ImperativeInterpreter.applyBatch(state, batch)
   }
