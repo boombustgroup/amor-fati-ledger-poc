@@ -21,6 +21,9 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
       .updated(flow.from, currentFrom - flow.amount)
       .updated(flow.to, currentTo + flow.amount)
 
+  private def applyBigIntAll(balances: Map[BigInt, BigInt], flows: Vector[BigIntFlowRef]): Map[BigInt, BigInt] =
+    flows.foldLeft(balances)(applyBigIntFlow)
+
   private def embedBalances(balances: Map[Int, Long]): Map[BigInt, BigInt] =
     balances.iterator.map { case (k, v) => BigInt(k) -> BigInt(v) }.toMap
 
@@ -37,10 +40,27 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
     amount <- genAmount
   yield Flow(from, to, amount, mechanism = 0)
 
+  private val genFlows = Gen.listOfN(10, genFlow).map(_.toVector)
+
   private val genBalances = for
     n        <- Gen.choose(2, 20)
     accounts <- Gen.listOfN(n, Gen.zip(genAccountId, genBalance))
   yield accounts.toMap
+
+  private def canApplyAllWithoutOverflow(balances: Map[Int, Long], flows: Vector[Flow]): Boolean =
+    flows
+      .foldLeft(Option(balances)) { (stateOpt, flow) =>
+        stateOpt.flatMap { state =>
+          val fromBalance = state.getOrElse(flow.from, 0L)
+          val toBalance   = state.getOrElse(flow.to, 0L)
+          val safe =
+            fromBalance >= Long.MinValue + flow.amount &&
+              toBalance <= Long.MaxValue - flow.amount
+
+          if safe then Some(Interpreter.applyFlow(state, flow)) else None
+        }
+      }
+      .isDefined
 
   "Interpreter.applyFlow" should "match the embedded BigInt reference model for non-overflow inputs" in {
     forAll(genBalances, genFlow) { (balances, flow) =>
@@ -52,6 +72,20 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
         val bigIntResult = applyBigIntFlow(
           embedBalances(balances),
           BigIntFlowRef(BigInt(flow.from), BigInt(flow.to), BigInt(flow.amount))
+        )
+
+        runtimeResult shouldBe projectBalances(bigIntResult)
+      }
+    }
+  }
+
+  "Interpreter.applyAll" should "match the embedded BigInt reference model for non-overflow sequences" in {
+    forAll(genBalances, genFlows) { (balances, flows) =>
+      whenever(canApplyAllWithoutOverflow(balances, flows)) {
+        val runtimeResult = Interpreter.applyAll(balances, flows)
+        val bigIntResult = applyBigIntAll(
+          embedBalances(balances),
+          flows.map(flow => BigIntFlowRef(BigInt(flow.from), BigInt(flow.to), BigInt(flow.amount)))
         )
 
         runtimeResult shouldBe projectBalances(bigIntResult)

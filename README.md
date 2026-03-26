@@ -20,10 +20,10 @@ The project has three layers with different levels of assurance:
 | **Distribution exactness** | Residual-plug distribution sums exactly to `total` for 2, 3, and general N-way list form | Z3 (residual plug) |
 | **Proportional distribution model** | Exact-division, unit-with-residual, and floor-with-residual proportional list models are non-negative and sum exactly to `total` | Z3 |
 | **Runtime apply semantics** | `Map[Int, Long]` runtime model preserves exact debit/credit + frame condition under anti-overflow preconditions | Z3 |
-| **Pure interpreter semantics** | A Stainless `Map[Int, Long]` model matching the pure production interpreter is defined and refined to the checked runtime semantics under the same executable anti-overflow contract | Z3 |
+| **Pure interpreter semantics** | A Stainless `Map[Int, Long]` model matching the pure production interpreter is defined for single flows and flow lists, and refined to the checked runtime semantics under the same executable anti-overflow contract | Z3 |
 | **Runtime sequential semantics** | `applyRuntimeFlowList` is formally defined for flow sequences that satisfy an explicit `canApplyRuntimeFlowList` anti-overflow contract | Z3 |
 | **Runtime-bounded refinement step** | A `BigInt` model with `Long`-range bounds is formally shown to refine to the pure `applyFlow` reference semantics for both single flows and executable flow lists | Z3 |
-| **Commutativity** | Flows on disjoint accounts produce the same result in any order in both `BigInt` and runtime `Int/Long` models | Z3 |
+| **Commutativity** | Flows on disjoint accounts produce the same result in any order in `BigInt`, runtime `Int/Long`, and pure interpreter `Map[Int, Long]` models | Z3 |
 
 This is the reference model — primarily pure `Map[BigInt, BigInt]`, plus a verified `Map[Int, Long]` runtime model with explicit anti-overflow preconditions, a verified pure-interpreter semantics layer, a verified sequential runtime contract, and a bounded `BigInt` refinement layer that makes the runtime range assumptions explicit. No arrays, no mutation. A true formal proof.
 
@@ -41,8 +41,9 @@ The chain of trust:
 
 ```
 Stainless/Z3 proves → Verified.scala (reference model)
-Verified.scala proves → pure `Map[Int, Long]` interpreter semantics under executable anti-overflow preconditions
+Verified.scala proves → pure `Map[Int, Long]` interpreter semantics and flow-list refinement under executable anti-overflow preconditions
 InterpreterVerifiedBridgeSpec tests → Interpreter == embedded BigInt reference model (non-overflow inputs)
+InterpreterVerifiedBridgeSpec tests → Interpreter.applyAll == embedded BigInt reference model for non-overflow sequences
 EquivalenceSpec tests → RuntimeInterpreterReference == Interpreter (bit-for-bit)
 EquivalenceSpec tests → ImperativeInterpreter == RuntimeInterpreterReference (bit-for-bit)
 InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala

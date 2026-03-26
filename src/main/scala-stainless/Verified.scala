@@ -128,6 +128,28 @@ object Verified:
     applyInterpreterFlow(balances, flow) == applyRuntimeFlow(balances, flow)
   }
 
+  def commutativityInterpreter(
+      balances: Map[Int, Long],
+      f1: RuntimeFlow,
+      f2: RuntimeFlow
+  ): Unit = {
+    require(validRuntimeFlow(f1) && validRuntimeFlow(f2))
+    require(f1.from != f2.from && f1.from != f2.to && f1.to != f2.from && f1.to != f2.to)
+
+    val b1From = balances.getOrElse(f1.from, 0L)
+    val b1To   = balances.getOrElse(f1.to, 0L)
+    val b2From = balances.getOrElse(f2.from, 0L)
+    val b2To   = balances.getOrElse(f2.to, 0L)
+
+    require(b1From >= Long.MinValue + f1.amount)
+    require(b1To <= Long.MaxValue - f1.amount)
+    require(b2From >= Long.MinValue + f2.amount)
+    require(b2To <= Long.MaxValue - f2.amount)
+  } ensuring { _ =>
+    applyInterpreterFlow(applyInterpreterFlow(balances, f1), f2) ==
+      applyInterpreterFlow(applyInterpreterFlow(balances, f2), f1)
+  }
+
   def applyRuntimeBoundedFlow(
       balances: Map[BigInt, BigInt],
       flow: RuntimeBoundedFlow
