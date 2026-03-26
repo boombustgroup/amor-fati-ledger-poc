@@ -11,8 +11,8 @@ class ValidatedBatchPlanSpec extends AnyFlatSpec with Matchers:
 
   "ValidatedBatchPlan" should "accept a sequence that stays executable across intermediate states" in {
     val state = new MutableWorldState(Map(HH -> 2, Banks -> 1))
-    state.getBalances(HH, Asset)(0) = 100L
-    state.getBalances(HH, Asset)(1) = 50L
+    state.setBalance(HH, Asset, 0, 100L) shouldBe Right(())
+    state.setBalance(HH, Asset, 1, 50L) shouldBe Right(())
 
     val batches = Vector(
       BatchedFlow.Scatter(HH, Banks, Array(10L, 0L), Array(0, 0), Asset, MechanismId(1)),
@@ -30,8 +30,8 @@ class ValidatedBatchPlanSpec extends AnyFlatSpec with Matchers:
 
   it should "reject a sequence that becomes overflow-unsafe after an earlier batch" in {
     val state = new MutableWorldState(Map(HH -> 1, Banks -> 1))
-    state.getBalances(HH, Asset)(0) = 5L
-    state.getBalances(Banks, Asset)(0) = Long.MaxValue - 5L
+    state.setBalance(HH, Asset, 0, 5L) shouldBe Right(())
+    state.setBalance(Banks, Asset, 0, Long.MaxValue - 5L) shouldBe Right(())
 
     val batches = Vector(
       BatchedFlow.Scatter(HH, Banks, Array(5L), Array(0), Asset, MechanismId(1)),
@@ -43,8 +43,8 @@ class ValidatedBatchPlanSpec extends AnyFlatSpec with Matchers:
 
   "ImperativeInterpreter.planAndApplyAll" should "use the validated batch-plan path as a preferred safe entrypoint" in {
     val state = new MutableWorldState(Map(HH -> 2, Banks -> 1))
-    state.getBalances(HH, Asset)(0) = 100L
-    state.getBalances(HH, Asset)(1) = 50L
+    state.setBalance(HH, Asset, 0, 100L) shouldBe Right(())
+    state.setBalance(HH, Asset, 1, 50L) shouldBe Right(())
 
     val batches = Vector(
       BatchedFlow.Scatter(HH, Banks, Array(10L, 0L), Array(0, 0), Asset, MechanismId(1)),
@@ -59,8 +59,8 @@ class ValidatedBatchPlanSpec extends AnyFlatSpec with Matchers:
 
   it should "return a Left when validation fails before executing the sequence" in {
     val state = new MutableWorldState(Map(HH -> 1, Banks -> 1))
-    state.getBalances(HH, Asset)(0) = 5L
-    state.getBalances(Banks, Asset)(0) = Long.MaxValue - 5L
+    state.setBalance(HH, Asset, 0, 5L) shouldBe Right(())
+    state.setBalance(Banks, Asset, 0, Long.MaxValue - 5L) shouldBe Right(())
 
     val batches = Vector(
       BatchedFlow.Scatter(HH, Banks, Array(5L), Array(0), Asset, MechanismId(1)),

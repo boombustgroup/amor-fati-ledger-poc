@@ -15,7 +15,7 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     val first  = state.getBalances(HH, Asset)
     val second = state.getBalances(HH, Asset)
 
-    first(0) = 123L
+    state.setBalance(HH, Asset, 0, 123L) shouldBe Right(())
 
     second should be theSameInstanceAs first
     state.balance(HH, Asset, 0) shouldBe 123L
@@ -27,10 +27,12 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     val bankDeposit = state.getBalances(Banks, Asset)
     val hhLoans     = state.getBalances(HH, Loan)
 
-    hhDeposits(0) = 10L
-    bankDeposit(0) = 20L
-    hhLoans(0) = 30L
+    state.setBalance(HH, Asset, 0, 10L) shouldBe Right(())
+    state.setBalance(Banks, Asset, 0, 20L) shouldBe Right(())
+    state.setBalance(HH, Loan, 0, 30L) shouldBe Right(())
 
+    hhDeposits should not be theSameInstanceAs(bankDeposit)
+    hhDeposits should not be theSameInstanceAs(hhLoans)
     state.balance(HH, Asset, 0) shouldBe 10L
     state.balance(Banks, Asset, 0) shouldBe 20L
     state.balance(HH, Loan, 0) shouldBe 30L
@@ -42,14 +44,17 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.balance(HH, Asset, 0) shouldBe 0L
   }
 
+  it should "return None for invalid balanceOption lookups" in {
+    val state = new MutableWorldState(Map(HH -> 3))
+
+    state.balanceOption(HH, Asset, 99) shouldBe None
+  }
+
   it should "omit zero entries from snapshots" in {
     val state = new MutableWorldState(Map(HH -> 3, Banks -> 2))
-    val hh    = state.getBalances(HH, Asset)
-    val bank  = state.getBalances(Banks, Asset)
-
-    hh(0) = 11L
-    hh(1) = 0L
-    bank(1) = -11L
+    state.setBalance(HH, Asset, 0, 11L) shouldBe Right(())
+    state.setBalance(HH, Asset, 1, 0L) shouldBe Right(())
+    state.setBalance(Banks, Asset, 1, -11L) shouldBe Right(())
 
     state.snapshot shouldBe Map(
       (HH, Asset, 0)    -> 11L,
@@ -58,15 +63,11 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "sum totals only for the requested asset type" in {
-    val state       = new MutableWorldState(Map(HH -> 3, Banks -> 2))
-    val hhDeposits  = state.getBalances(HH, Asset)
-    val bankDeposit = state.getBalances(Banks, Asset)
-    val hhLoans     = state.getBalances(HH, Loan)
-
-    hhDeposits(0) = 100L
-    hhDeposits(1) = -40L
-    bankDeposit(0) = -60L
-    hhLoans(0) = 999L
+    val state = new MutableWorldState(Map(HH -> 3, Banks -> 2))
+    state.setBalance(HH, Asset, 0, 100L) shouldBe Right(())
+    state.setBalance(HH, Asset, 1, -40L) shouldBe Right(())
+    state.setBalance(Banks, Asset, 0, -60L) shouldBe Right(())
+    state.setBalance(HH, Loan, 0, 999L) shouldBe Right(())
 
     state.totalForAsset(Asset) shouldBe 0L
     state.totalForAsset(Loan) shouldBe 999L
@@ -77,4 +78,37 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
 
     state.sectorSize(Banks) shouldBe 1
     state.getBalances(Banks, Asset).length shouldBe 1
+  }
+
+  it should "reject out-of-bounds writes through setBalance" in {
+    val state = new MutableWorldState(Map(HH -> 3))
+
+    state.setBalance(HH, Asset, 3, 1L).isLeft shouldBe true
+    state.balanceOption(HH, Asset, 3) shouldBe None
+  }
+
+  it should "apply checked delta updates through adjustBalance" in {
+    val state = new MutableWorldState(Map(HH -> 3))
+
+    state.setBalance(HH, Asset, 0, 10L) shouldBe Right(())
+    state.adjustBalance(HH, Asset, 0, 5L) shouldBe Right(())
+    state.adjustBalance(HH, Asset, 0, -3L) shouldBe Right(())
+
+    state.balance(HH, Asset, 0) shouldBe 12L
+  }
+
+  it should "reject out-of-bounds delta updates through adjustBalance" in {
+    val state = new MutableWorldState(Map(HH -> 3))
+
+    state.adjustBalance(HH, Asset, 9, 1L).isLeft shouldBe true
+  }
+
+  it should "reject overflow and underflow in adjustBalance" in {
+    val state = new MutableWorldState(Map(HH -> 3))
+
+    state.setBalance(HH, Asset, 0, Long.MaxValue) shouldBe Right(())
+    state.adjustBalance(HH, Asset, 0, 1L).isLeft shouldBe true
+
+    state.setBalance(HH, Asset, 1, Long.MinValue) shouldBe Right(())
+    state.adjustBalance(HH, Asset, 1, -1L).isLeft shouldBe true
   }

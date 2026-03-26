@@ -56,9 +56,8 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
 
   it should "preserve total wealth" in {
     forAll(genScatterFlow) { batch =>
-      val state   = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
-      val fromArr = state.getBalances(HH, Asset)
-      (0 until NumHH).foreach(i => fromArr(i) = 1000000L)
+      val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
+      (0 until NumHH).foreach(i => state.setBalance(HH, Asset, i, 1000000L) shouldBe Right(()))
       val before = state.totalForAsset(Asset)
 
       ImperativeInterpreter.applyBatch(state, batch)
@@ -129,7 +128,7 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     )
 
     val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
-    state.getBalances(HH, Asset)(0) = Long.MinValue
+    state.setBalance(HH, Asset, 0, Long.MinValue) shouldBe Right(())
 
     val refState = Map((HH, Asset, 0) -> Long.MinValue)
     ImperativeInterpreter.canApplyBatch(state, batch) shouldBe false
@@ -152,7 +151,7 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     )
 
     val state = new MutableWorldState(Map(HH -> NumHH, Banks -> NumBanks))
-    state.getBalances(Banks, Asset)(0) = Long.MaxValue
+    state.setBalance(Banks, Asset, 0, Long.MaxValue) shouldBe Right(())
 
     val refState = Map((Banks, Asset, 0) -> Long.MaxValue)
     ImperativeInterpreter.canApplyBatch(state, batch) shouldBe false
@@ -202,9 +201,8 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
 
   it should "preserve total wealth" in {
     forAll(genBroadcastFlow) { batch =>
-      val state  = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
-      val zusArr = state.getBalances(Funds, Asset)
-      zusArr(ZusIndex) = 100000000L // ZUS has 10K PLN budget
+      val state = new MutableWorldState(Map(HH -> NumHH, Funds -> NumFunds))
+      state.setBalance(Funds, Asset, ZusIndex, 100000000L) shouldBe Right(()) // ZUS has 10K PLN budget
       val before = state.totalForAsset(Asset)
 
       ImperativeInterpreter.applyBatch(state, batch)
