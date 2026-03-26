@@ -34,8 +34,9 @@ Production implementations are **not themselves formally verified**. They are te
 - **`Interpreter.scala`** (pure Map-based) — property-based tests (ScalaCheck, 100+ random scenarios per property), explicit `canApplyFlow` / `canApplyAll` runtime overflow contracts with checked entrypoints, plus a test bridge against an embedded `BigInt` reference-model shape for non-overflow inputs
 - **`ImperativeInterpreter.scala`** (Array-based, fast) — tested for bit-for-bit equivalence with both `Interpreter.scala` and a pure runtime reference model via `EquivalenceSpec`, with shared runtime validation of batch dimensions, indices, non-negative amounts, and Long overflow safety via explicit checked contracts, a validated batch-plan wrapper, and a preferred `planAndApplyAll` entrypoint
 - **`MutableWorldState.scala`** (mutable storage layer) — covered by direct contract tests for sparse snapshots, per-asset totals, key separation, and backing-array reuse; still a thin mutable API that relies on callers for index discipline
-- **`Distribute.scala`** (N-way distribution with floor-based residual plug) — property-based tests checking `sum == total`, non-negativity, exact equivalence with `DistributeReference.scala`, and the same floor-prefix/last-residual shape proved for list models in `Verified.scala`
-- **`DistributeReference.scala`** (pure distribution model) — tested against a `BigInt` bridge spec that mirrors the floor-with-residual list shape proved in `Verified.scala`
+- **`Distribute.scala`** (N-way distribution with floor-based residual plug) — thin production adapter over the shared pure `DistributeModel`, with property-based tests checking `sum == total`, non-negativity, exact equivalence across adapters, and the same floor-prefix/last-residual shape proved for list models in `Verified.scala`
+- **`DistributeModel.scala`** (shared pure distribution model) — canonical executable semantics for production floor-with-residual distribution
+- **`DistributeReference.scala`** (pure distribution adapter) — thin list-based adapter over `DistributeModel`, tested against a `BigInt` bridge spec that mirrors the floor-with-residual list shape proved in `Verified.scala`
 
 The chain of trust:
 
@@ -47,7 +48,7 @@ InterpreterVerifiedBridgeSpec tests → Interpreter.applyAll == embedded BigInt 
 EquivalenceSpec tests → RuntimeInterpreterReference == Interpreter (bit-for-bit)
 EquivalenceSpec tests → ImperativeInterpreter == RuntimeInterpreterReference (bit-for-bit)
 InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala
-DistributeSpec tests → Distribute == DistributeReference and preserves the floor-with-residual shape proved in Verified.scala
+DistributeSpec tests → Distribute, DistributeReference, and DistributeModel share the same floor-with-residual semantics
 DistributeVerifiedBridgeSpec tests → DistributeReference == Verified floor-with-residual BigInt list shape
 ```
 
@@ -55,7 +56,7 @@ DistributeVerifiedBridgeSpec tests → DistributeReference == Verified floor-wit
 
 ### Layer 3: Not yet formally verified
 
-- Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`; `DistributeReference.scala` is the canonical pure model of the production algorithm, and `Distribute.scala` is tested against both that reference and the same floor-with-residual shape, but there is still no direct Stainless proof over the production `Array[Long]` implementation
+- Residual-plug N-way distribution and proportional floor-with-residual list models are formally verified in `Verified.scala`; `DistributeModel.scala` is now the canonical executable pure model of the production algorithm, and `Distribute.scala` / `DistributeReference.scala` are thin adapters over it, but there is still no direct Stainless proof over the production `Array[Long]` implementation
 - Batch dimensions, sender/target index bounds, non-negative amounts, and batch-level Long overflow safety — enforced at runtime by the shared `BatchExecutionContract`; sequential executability can now be packaged into `ValidatedBatchPlan` and consumed through `ImperativeInterpreter.planAndApplyAll`, but none of this batch machinery is yet formally verified
 - `MutableWorldState` — not formally verified; direct contract tests cover storage semantics, but per-index safety is still a caller responsibility and the backing arrays remain intentionally mutable
 - Direct proof bridge between runtime `Int/Long` model and `BigInt` reference model — not yet fully formalized in Stainless; a bounded `BigInt` refinement step now exists, but direct cross-type embedding for `Int/Long -> BigInt` is still missing

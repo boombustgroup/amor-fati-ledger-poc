@@ -85,3 +85,15 @@ class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyCh
       result.forall(_ >= 0L) shouldBe true
     }
   }
+
+  it should "delegate production and reference adapters to the same pure model" in {
+    val genTotal  = Gen.choose(1L, 10000000000L)
+    val genSize   = Gen.choose(1, 20)
+    val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)).map(_.toArray))
+    forAll(genTotal, genShares) { (total, shares) =>
+      val model = DistributeModel.distribute(total, shares.toVector)
+
+      Distribute.distribute(total, shares).toVector shouldBe model
+      DistributeReference.distribute(total, shares.toList) shouldBe model.toList
+    }
+  }
