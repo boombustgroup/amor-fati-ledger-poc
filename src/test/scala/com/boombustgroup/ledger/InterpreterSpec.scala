@@ -52,6 +52,37 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
     Interpreter.totalWealth(result) shouldBe Interpreter.totalWealth(balances)
   }
 
+  "canApplyFlow" should "reject debits that would underflow Long" in {
+    val balances = Map(0 -> Long.MinValue, 1 -> 0L)
+    val flow     = Flow(from = 0, to = 1, amount = 1L, mechanism = 0)
+
+    Interpreter.canApplyFlow(balances, flow) shouldBe false
+  }
+
+  it should "reject credits that would overflow Long" in {
+    val balances = Map(0 -> 0L, 1 -> Long.MaxValue)
+    val flow     = Flow(from = 0, to = 1, amount = 1L, mechanism = 0)
+
+    Interpreter.canApplyFlow(balances, flow) shouldBe false
+  }
+
+  "applyCheckedFlow" should "return a Left instead of overflowing runtime Long bounds" in {
+    val balances = Map(0 -> Long.MinValue, 1 -> 0L)
+    val flow     = Flow(from = 0, to = 1, amount = 1L, mechanism = 0)
+
+    Interpreter.applyCheckedFlow(balances, flow).isLeft shouldBe true
+  }
+
+  "applyCheckedAll" should "stop on the first overflow-unsafe step in a flow sequence" in {
+    val balances = Map(0 -> Long.MinValue, 1 -> 0L, 2 -> 0L)
+    val flows = Vector(
+      Flow(1, 2, 1L, 0),
+      Flow(0, 1, 1L, 1)
+    )
+
+    Interpreter.applyCheckedAll(balances, flows).isLeft shouldBe true
+  }
+
   "Flow" should "reject self-transfers" in {
     an[IllegalArgumentException] should be thrownBy {
       Flow(from = 0, to = 0, amount = 100L, mechanism = 0)
