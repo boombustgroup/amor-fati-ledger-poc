@@ -7,6 +7,10 @@ import org.scalacheck.Gen
 
 class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
+  private def floorPrefix(total: Long, shares: Array[Long]): Array[Long] =
+    val shareSum = shares.sum
+    shares.init.map(share => ((BigInt(total) * BigInt(share)) / BigInt(shareSum)).toLong)
+
   "distribute" should "always sum to total (residual plugging)" in {
     val genTotal  = Gen.choose(1L, 10000000000L)
     val genShares = Gen.listOfN(7, Gen.choose(1L, 10000L)).map(_.toArray)
@@ -65,5 +69,19 @@ class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyCh
       val result    = Distribute.distribute(total, shares)
       val reference = DistributeReference.distribute(total, shares.toList).toArray
       result shouldBe reference
+    }
+  }
+
+  it should "preserve the floor-with-residual shape proved in Stainless" in {
+    val genTotal  = Gen.choose(1L, 10000000000L)
+    val genSize   = Gen.choose(1, 20)
+    val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)).map(_.toArray))
+    forAll(genTotal, genShares) { (total, shares) =>
+      val result = Distribute.distribute(total, shares)
+
+      result.length shouldBe shares.length
+      result.init.sameElements(floorPrefix(total, shares)) shouldBe true
+      result.last shouldBe total - result.init.sum
+      result.forall(_ >= 0L) shouldBe true
     }
   }
