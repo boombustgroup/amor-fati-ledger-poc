@@ -10,38 +10,33 @@ package com.boombustgroup.ledger
   */
 object ImperativeInterpreter:
 
-  private def validateBatch(state: MutableWorldState, batch: BatchedFlow): Unit = batch match
-    case BatchedFlow.Scatter(from, to, amounts, targets, _, _) =>
-      val fromSize = state.sectorSize(from)
-      val toSize   = state.sectorSize(to)
-      require(
-        amounts.length == fromSize,
-        s"Scatter amounts.length=${amounts.length} must equal sectorSize($from)=$fromSize"
-      )
-      var i = 0
-      while i < amounts.length do
-        require(amounts(i) >= 0L, s"Scatter amount at index $i is negative: ${amounts(i)}")
-        require(
-          targets(i) >= 0 && targets(i) < toSize,
-          s"Scatter target index at position $i out of bounds: ${targets(i)} for sectorSize($to)=$toSize"
-        )
-        i += 1
+  private def validateBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
+    BatchExecutionContract.requireValidBatch(
+      state.sectorSize,
+      (sector, asset, index) => state.balance(sector, asset, index),
+      batch
+    )
 
-    case BatchedFlow.Broadcast(from, fromIdx, to, amounts, targets, _, _) =>
-      val fromSize = state.sectorSize(from)
-      val toSize   = state.sectorSize(to)
-      require(
-        fromIdx >= 0 && fromIdx < fromSize,
-        s"Broadcast fromIndex=$fromIdx out of bounds for sectorSize($from)=$fromSize"
+  def canApplyBatch(state: MutableWorldState, batch: BatchedFlow): Boolean =
+    BatchExecutionContract.canApplyBatch(
+      state.sectorSize,
+      (sector, asset, index) => state.balance(sector, asset, index),
+      batch
+    )
+
+  def applyCheckedBatch(state: MutableWorldState, batch: BatchedFlow): Either[String, Unit] =
+    BatchExecutionContract
+      .validateBatch(
+        state.sectorSize,
+        (sector, asset, index) => state.balance(sector, asset, index),
+        batch
       )
-      var i = 0
-      while i < amounts.length do
-        require(amounts(i) >= 0L, s"Broadcast amount at index $i is negative: ${amounts(i)}")
-        require(
-          targets(i) >= 0 && targets(i) < toSize,
-          s"Broadcast target index at position $i out of bounds: ${targets(i)} for sectorSize($to)=$toSize"
-        )
-        i += 1
+      .map(_ => applyBatch(state, batch))
+
+  def applyCheckedAll(state: MutableWorldState, flows: Vector[BatchedFlow]): Either[String, Unit] =
+    flows.foldLeft[Either[String, Unit]](Right(())) { (acc, batch) =>
+      acc.flatMap(_ => applyCheckedBatch(state, batch))
+    }
 
   /** Apply a single batched flow. O(N) where N = amounts.length. */
   def applyBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
