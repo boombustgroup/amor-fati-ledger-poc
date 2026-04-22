@@ -16,6 +16,7 @@ enum AssetType:
   // Bonds
   case GovBondAFS
   case GovBondHTM
+  case QuasiFiscalBond
   case CorpBond
   // Central bank
   case Reserve
