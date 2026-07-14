@@ -1,7 +1,7 @@
 # amor-fati-ledger
 
-[![CI](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/ci.yml)
-[![Formal Verification](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/verify.yml/badge.svg)](https://github.com/boombustgroup/amor-fati-ledger/actions/workflows/verify.yml)
+[![CI](https://github.com/amor-fati-systems/amor-fati-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/amor-fati-systems/amor-fati-ledger/actions/workflows/ci.yml)
+[![Formal Verification](https://github.com/amor-fati-systems/amor-fati-ledger/actions/workflows/verify.yml/badge.svg)](https://github.com/amor-fati-systems/amor-fati-ledger/actions/workflows/verify.yml)
 
 Verified accounting kernel for Stock-Flow Consistent (SFC) simulation engines.
 
@@ -9,7 +9,7 @@ Verified accounting kernel for Stock-Flow Consistent (SFC) simulation engines.
 
 Most simulation engines treat accounting consistency as a debugging concern. `amor-fati-ledger` treats it as part of the execution model.
 
-Built for [amor-fati](https://github.com/boombustgroup/amor-fati), a macroeconomic SFC-ABM simulation engine.
+Built for [amor-fati](https://github.com/amor-fati-systems/amor-fati), a macroeconomic SFC-ABM simulation engine.
 
 > Economic narratives may fail. The ledger must not.
 
@@ -72,7 +72,7 @@ sbt test
 ## Further Reading
 
 - [docs/verification.md](docs/verification.md) — verification scope, trust chain, proof boundaries, and internal architecture notes
-- [amor-fati](https://github.com/boombustgroup/amor-fati) — macroeconomic SFC-ABM simulation engine
+- [amor-fati](https://github.com/amor-fati-systems/amor-fati) — macroeconomic SFC-ABM simulation engine
 
 ## License
 
