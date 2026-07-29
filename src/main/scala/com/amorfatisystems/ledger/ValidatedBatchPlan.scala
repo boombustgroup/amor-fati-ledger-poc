@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** A caller-facing validated batch sequence.
   *
@@ -32,17 +32,17 @@ object ValidatedBatchPlan:
     private val sectorSizes = Map.from(state.sectorSizesView)
     private var balances    = state.snapshot
 
-    private def update(sector: EntitySector, asset: AssetType, index: Int, delta: Long): Unit =
+    private def update(sector: AccountGroupId, asset: InstrumentId, index: Int, delta: Long): Unit =
       val key     = (sector, asset, index)
       val updated = balances.getOrElse(key, 0L) + delta
       balances =
         if updated == 0L then balances - key
         else balances.updated(key, updated)
 
-    def sectorSize(sector: EntitySector): Int =
+    def sectorSize(sector: AccountGroupId): Int =
       sectorSizes.getOrElse(sector, 1)
 
-    def balance(sector: EntitySector, asset: AssetType, index: Int): Long =
+    def balance(sector: AccountGroupId, asset: InstrumentId, index: Int): Long =
       balances.getOrElse((sector, asset, index), 0L)
 
     def apply(batch: BatchedFlow): Unit =

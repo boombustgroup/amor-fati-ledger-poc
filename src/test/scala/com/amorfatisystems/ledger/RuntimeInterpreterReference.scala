@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** Pure reference model for the imperative runtime interpreter.
   *
@@ -6,35 +6,35 @@ package com.boombustgroup.ledger
   */
 object RuntimeInterpreterReference:
 
-  type BalanceKey   = (EntitySector, AssetType, Int)
+  type BalanceKey   = (AccountGroupId, InstrumentId, Int)
   type BalanceState = Map[BalanceKey, Long]
 
-  private def key(sector: EntitySector, asset: AssetType, index: Int): BalanceKey =
+  private def key(sector: AccountGroupId, asset: InstrumentId, index: Int): BalanceKey =
     (sector, asset, index)
 
   def snapshotToFlatMap(
       snapshot: BalanceState,
-      sectorOffsets: Map[EntitySector, Int],
-      asset: AssetType
+      sectorOffsets: Map[AccountGroupId, Int],
+      asset: InstrumentId
   ): Map[Int, Long] =
     snapshot.collect {
       case ((sector, a, index), balance) if a == asset =>
         (sectorOffsets(sector) + index) -> balance
     }
 
-  private def update(state: BalanceState, sector: EntitySector, asset: AssetType, index: Int, delta: Long): BalanceState =
+  private def update(state: BalanceState, sector: AccountGroupId, asset: InstrumentId, index: Int, delta: Long): BalanceState =
     val k       = key(sector, asset, index)
     val updated = state.getOrElse(k, 0L) + delta
     if updated == 0L then state - k else state.updated(k, updated)
 
-  def canApplyBatch(sectorSizes: Map[EntitySector, Int], state: BalanceState, batch: BatchedFlow): Boolean =
+  def canApplyBatch(sectorSizes: Map[AccountGroupId, Int], state: BalanceState, batch: BatchedFlow): Boolean =
     BatchExecutionContract.canApplyBatch(
       sector => sectorSizes.getOrElse(sector, 1),
       (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
       batch
     )
 
-  def applyBatch(sectorSizes: Map[EntitySector, Int], state: BalanceState, batch: BatchedFlow): BalanceState =
+  def applyBatch(sectorSizes: Map[AccountGroupId, Int], state: BalanceState, batch: BatchedFlow): BalanceState =
     BatchExecutionContract.requireValidBatch(
       sector => sectorSizes.getOrElse(sector, 1),
       (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
@@ -58,5 +58,5 @@ object RuntimeInterpreterReference:
         }
         update(afterCredits, from, asset, fromIdx, -totalDebit)
 
-  def applyAll(sectorSizes: Map[EntitySector, Int], state: BalanceState, flows: Vector[BatchedFlow]): BalanceState =
+  def applyAll(sectorSizes: Map[AccountGroupId, Int], state: BalanceState, flows: Vector[BatchedFlow]): BalanceState =
     flows.foldLeft(state)((acc, batch) => applyBatch(sectorSizes, acc, batch))

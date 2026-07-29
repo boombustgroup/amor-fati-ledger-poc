@@ -1,15 +1,15 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** A batch of monetary flows from one sector to another.
   *
   * Two variants for the two fundamental flow patterns in SFC-ABM:
   *   - Scatter (N:M): iterate over senders — HH→Bank, Firm→Gov (tax)
-  *   - Broadcast (1:N): iterate over receivers — Gov→HH (transfers), ZUS→HH (pensions)
+  *   - Broadcast (1:N): iterate over receivers — Government→population (transfers), payer→population (pensions)
   */
 sealed trait BatchedFlow:
-  def from: EntitySector
-  def to: EntitySector
-  def asset: AssetType
+  def from: AccountGroupId
+  def to: AccountGroupId
+  def asset: InstrumentId
   def mechanism: MechanismId
 
 object BatchedFlow:
@@ -19,11 +19,11 @@ object BatchedFlow:
     * amounts(42) = how much sender #42 pays. targetIndices(42) = which receiver gets it. amounts.length == sectorSize(from).
     */
   case class Scatter(
-      from: EntitySector,
-      to: EntitySector,
+      from: AccountGroupId,
+      to: AccountGroupId,
       amounts: Array[Long],
       targetIndices: Array[Int],
-      asset: AssetType,
+      asset: InstrumentId,
       mechanism: MechanismId
   ) extends BatchedFlow:
     require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")
@@ -34,12 +34,12 @@ object BatchedFlow:
     * sectorSize(to) if sparse). totalDebit is aggregated in one shot — avoids cache thrashing on fromStore.
     */
   case class Broadcast(
-      from: EntitySector,
+      from: AccountGroupId,
       fromIndex: Int,
-      to: EntitySector,
+      to: AccountGroupId,
       amounts: Array[Long],
       targetIndices: Array[Int],
-      asset: AssetType,
+      asset: InstrumentId,
       mechanism: MechanismId
   ) extends BatchedFlow:
     require(amounts.length == targetIndices.length, s"amounts.length=${amounts.length} != targetIndices.length=${targetIndices.length}")

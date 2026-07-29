@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** Shared executable batch semantics.
   *
@@ -11,21 +11,21 @@ object BatchDeltaSemantics:
   final case class BroadcastCredit(targetIndex: Int, amount: Long)
 
   sealed trait BatchPlan:
-    def from: EntitySector
-    def to: EntitySector
-    def asset: AssetType
+    def from: AccountGroupId
+    def to: AccountGroupId
+    def asset: InstrumentId
 
   final case class ScatterPlan(
-      from: EntitySector,
-      to: EntitySector,
-      asset: AssetType,
+      from: AccountGroupId,
+      to: AccountGroupId,
+      asset: InstrumentId,
       deltas: Vector[ScatterDelta]
   ) extends BatchPlan
 
   final case class BroadcastPlan(
-      from: EntitySector,
-      to: EntitySector,
-      asset: AssetType,
+      from: AccountGroupId,
+      to: AccountGroupId,
+      asset: InstrumentId,
       fromIndex: Int,
       totalDebit: Long,
       credits: Vector[BroadcastCredit]

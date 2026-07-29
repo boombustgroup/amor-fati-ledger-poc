@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec

@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** Shared executable contract for runtime batched flows.
   *
@@ -7,8 +7,8 @@ package com.boombustgroup.ledger
   */
 object BatchExecutionContract:
 
-  type SectorSizeOf = EntitySector => Int
-  type BalanceAt    = (EntitySector, AssetType, Int) => Long
+  type SectorSizeOf = AccountGroupId => Int
+  type BalanceAt    = (AccountGroupId, InstrumentId, Int) => Long
 
   def validateBatch(
       sectorSizeOf: SectorSizeOf,

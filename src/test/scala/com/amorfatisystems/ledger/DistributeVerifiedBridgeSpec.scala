@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
@@ -38,7 +38,7 @@ class DistributeVerifiedBridgeSpec extends AnyFlatSpec with Matchers with ScalaC
     DistributeModel.distribute(total, shares.toVector).map(BigInt(_)).toList shouldBe verifiedShape(total, shares)
   }
 
-  it should "keep the legacy list adapter aligned with the shared pure model" in {
+  it should "keep the reference list projection aligned with the shared pure model" in {
     val genTotal  = Gen.choose(1L, 10000000000L)
     val genSize   = Gen.choose(1, 20)
     val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)))

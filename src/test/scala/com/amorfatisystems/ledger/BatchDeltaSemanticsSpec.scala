@@ -1,18 +1,18 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 class BatchDeltaSemanticsSpec extends AnyFlatSpec with Matchers:
 
-  private val HH    = EntitySector.Households
-  private val Banks = EntitySector.Banks
-  private val Asset = AssetType.DemandDeposit
+  private val GroupA    = AccountGroupId(1)
+  private val GroupB = AccountGroupId(3)
+  private val Asset = InstrumentId(1)
 
   "BatchDeltaSemantics.plan" should "extract explicit scatter deltas for non-zero entries only" in {
     val batch = BatchedFlow.Scatter(
-      HH,
-      Banks,
+      GroupA,
+      GroupB,
       Array(10L, 0L, 7L),
       Array(1, 0, 2),
       Asset,
@@ -20,8 +20,8 @@ class BatchDeltaSemanticsSpec extends AnyFlatSpec with Matchers:
     )
 
     BatchDeltaSemantics.plan(batch) shouldBe BatchDeltaSemantics.ScatterPlan(
-      HH,
-      Banks,
+      GroupA,
+      GroupB,
       Asset,
       Vector(
         BatchDeltaSemantics.ScatterDelta(0, 1, 10L),
@@ -32,9 +32,9 @@ class BatchDeltaSemanticsSpec extends AnyFlatSpec with Matchers:
 
   it should "extract explicit broadcast credits plus one aggregate debit" in {
     val batch = BatchedFlow.Broadcast(
-      Banks,
+      GroupB,
       1,
-      HH,
+      GroupA,
       Array(0L, 20L, 30L),
       Array(0, 1, 2),
       Asset,
@@ -42,8 +42,8 @@ class BatchDeltaSemanticsSpec extends AnyFlatSpec with Matchers:
     )
 
     BatchDeltaSemantics.plan(batch) shouldBe BatchDeltaSemantics.BroadcastPlan(
-      Banks,
-      HH,
+      GroupB,
+      GroupA,
       Asset,
       1,
       50L,

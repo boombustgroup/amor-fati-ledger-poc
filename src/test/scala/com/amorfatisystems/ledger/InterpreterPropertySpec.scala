@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -8,7 +8,7 @@ import org.scalacheck.Gen
 class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
   private val genAccountId = Gen.choose(0, 99)
-  private val genAmount    = Gen.choose(1L, 1000000000L) // 0.0001 to 100K PLN
+  private val genAmount    = Gen.choose(1L, 1000000000L) // generic ledger units
   private val genBalance   = Gen.choose(-1000000000L, 1000000000L)
 
   private val genFlow = for
