@@ -13,7 +13,7 @@ import scala.collection.mutable
   * Important runtime boundary:
   *   - raw backing arrays are intentionally exposed only to internal `ledger` package code
   *   - public callers should prefer checked helpers like `balanceOption`, `setBalance`, and `adjustBalance`
-  *   - `BatchExecutionContract` remains the main batched-flow guardrail for sequence execution
+  *   - callers build validated `Transfer` operations before mutating state
   */
 class MutableWorldState(private val partitionSizes: Map[AccountPartitionId, Int]):
 
