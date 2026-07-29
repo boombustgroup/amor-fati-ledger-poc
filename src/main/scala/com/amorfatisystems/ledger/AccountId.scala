@@ -6,3 +6,5 @@ opaque type AccountId = Int
 object AccountId:
   def apply(value: Int): AccountId = value
   def value(id: AccountId): Int = id
+  given Conversion[Int, AccountId] with
+    def apply(value: Int): AccountId = value

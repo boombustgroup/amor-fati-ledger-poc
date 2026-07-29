@@ -7,7 +7,7 @@ import org.scalacheck.Gen
 
 class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyChecks:
 
-  private val genAccountId = Gen.choose(0, 99)
+  private val genAccountId = Gen.choose(0, 99).map(AccountId(_))
   private val genAmount    = Gen.choose(1L, 1000000000L) // generic ledger units
   private val genBalance   = Gen.choose(-1000000000L, 1000000000L)
 
@@ -20,7 +20,7 @@ class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckP
   private val genBalances = for
     n        <- Gen.choose(2, 20)
     accounts <- Gen.listOfN(n, Gen.zip(genAccountId, genBalance))
-  yield accounts.toMap
+  yield accounts.map { case (k, v) => k -> v }.toMap
 
   "applyFlow" should "always preserve total wealth (flow conservation)" in {
     forAll(genBalances, genFlow) { (balances, flow) =>
@@ -58,7 +58,7 @@ class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckP
   "independent flows" should "commute (order doesn't matter for disjoint accounts)" in {
     forAll(genBalances, genAmount, genAmount) { (balances, amt1, amt2) =>
       whenever(balances.size >= 4) {
-        val keys = balances.keys.toVector.sorted.take(4)
+        val keys = balances.keys.toVector.sortBy(AccountId.value).take(4)
         val f1   = Flow(keys(0), keys(1), amt1, 0)
         val f2   = Flow(keys(2), keys(3), amt2, 1)
 

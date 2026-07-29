@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers
 class InterpreterSpec extends AnyFlatSpec with Matchers:
 
   "applyFlow" should "preserve total wealth" in {
-    val balances = Map(0 -> 100000L, 1 -> 50000L, 2 -> 30000L)
+    val balances = Map[AccountId, Long](AccountId(0) -> 100000L, AccountId(1) -> 50000L, AccountId(2) -> 30000L)
     val flow     = Flow(from = 0, to = 1, amount = 25000L, mechanism = 0)
     val result   = Interpreter.applyFlow(balances, flow)
 
@@ -14,7 +14,7 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "debit from and credit to" in {
-    val balances = Map(0 -> 100000L, 1 -> 50000L)
+    val balances = Map[AccountId, Long](AccountId(0) -> 100000L, AccountId(1) -> 50000L)
     val flow     = Flow(from = 0, to = 1, amount = 25000L, mechanism = 0)
     val result   = Interpreter.applyFlow(balances, flow)
 
@@ -23,7 +23,7 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "not affect other accounts (frame condition)" in {
-    val balances = Map(0 -> 100000L, 1 -> 50000L, 2 -> 30000L)
+    val balances = Map[AccountId, Long](AccountId(0) -> 100000L, AccountId(1) -> 50000L, AccountId(2) -> 30000L)
     val flow     = Flow(from = 0, to = 1, amount = 10000L, mechanism = 0)
     val result   = Interpreter.applyFlow(balances, flow)
 
@@ -31,7 +31,7 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
   }
 
   it should "handle missing accounts (default to zero)" in {
-    val balances = Map.empty[Int, Long]
+    val balances = Map.empty[AccountId, Long]
     val flow     = Flow(from = 0, to = 1, amount = 10000L, mechanism = 0)
     val result   = Interpreter.applyFlow(balances, flow)
 
@@ -41,7 +41,7 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
   }
 
   "applyAll" should "preserve total wealth across multiple flows" in {
-    val balances = Map(0 -> 1000000L, 1 -> 500000L, 2 -> 300000L)
+    val balances = Map[AccountId, Long](AccountId(0) -> 1000000L, AccountId(1) -> 500000L, AccountId(2) -> 300000L)
     val flows = Vector(
       Flow(0, 1, 100000L, 0),
       Flow(1, 2, 50000L, 1),
@@ -53,28 +53,28 @@ class InterpreterSpec extends AnyFlatSpec with Matchers:
   }
 
   "canApplyFlow" should "reject debits that would underflow Long" in {
-    val balances = Map(0 -> Long.MinValue, 1 -> 0L)
+    val balances = Map[AccountId, Long](AccountId(0) -> Long.MinValue, AccountId(1) -> 0L)
     val flow     = Flow(from = 0, to = 1, amount = 1L, mechanism = 0)
 
     Interpreter.canApplyFlow(balances, flow) shouldBe false
   }
 
   it should "reject credits that would overflow Long" in {
-    val balances = Map(0 -> 0L, 1 -> Long.MaxValue)
+    val balances = Map[AccountId, Long](AccountId(0) -> 0L, AccountId(1) -> Long.MaxValue)
     val flow     = Flow(from = 0, to = 1, amount = 1L, mechanism = 0)
 
     Interpreter.canApplyFlow(balances, flow) shouldBe false
   }
 
   "applyCheckedFlow" should "return a Left instead of overflowing runtime Long bounds" in {
-    val balances = Map(0 -> Long.MinValue, 1 -> 0L)
+    val balances = Map[AccountId, Long](AccountId(0) -> Long.MinValue, AccountId(1) -> 0L)
     val flow     = Flow(from = 0, to = 1, amount = 1L, mechanism = 0)
 
     Interpreter.applyCheckedFlow(balances, flow).isLeft shouldBe true
   }
 
   "applyCheckedAll" should "stop on the first overflow-unsafe step in a flow sequence" in {
-    val balances = Map(0 -> Long.MinValue, 1 -> 0L, 2 -> 0L)
+    val balances = Map[AccountId, Long](AccountId(0) -> Long.MinValue, AccountId(1) -> 0L, AccountId(2) -> 0L)
     val flows = Vector(
       Flow(1, 2, 1L, 0),
       Flow(0, 1, 1L, 1)

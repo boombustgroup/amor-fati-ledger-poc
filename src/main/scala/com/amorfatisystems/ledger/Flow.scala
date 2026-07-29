@@ -7,10 +7,10 @@ package com.amorfatisystems.ledger
   * `amount` is Long-based (scale-neutral integer ledger units) for exact additive arithmetic. No floating-point accumulation errors.
   */
 case class Flow(
-    from: Int,     // account id of payer
-    to: Int,       // account id of receiver
+    from: AccountId,
+    to: AccountId,
     amount: Long,  // monetary amount (scale-neutral integer ledger units)
-    mechanism: Int // which mechanism produced this flow (enum ordinal)
+    mechanism: MechanismId
 ):
   require(from != to, s"Self-transfer: from=$from == to=$to")
   require(amount >= 0, s"Negative flow: $amount. Reverse from/to instead.")

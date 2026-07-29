@@ -11,4 +11,6 @@ opaque type MechanismId = Int
 
 object MechanismId:
   def apply(id: Int): MechanismId           = id
+  given Conversion[Int, MechanismId] with
+    def apply(value: Int): MechanismId = value
   extension (m: MechanismId) def toInt: Int = m

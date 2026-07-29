@@ -30,7 +30,8 @@ The kernel owns only:
 - signed integer ledger units with checked arithmetic; scale and presentation
   are supplied by the currency/economy contract;
 - debit/credit flows and batched execution;
-- account-state storage keyed by account handles and immutable execution plans;
+- account-state storage exposed through account handles; any array partitioning
+  is an internal data-oriented layout detail;
 - conservation, bounds, overflow, atomicity, and reference/imperative
   equivalence contracts;
 - explicit account lifecycle operations.
@@ -73,8 +74,8 @@ LedgerTopology
   optional instrument/currency metadata per account
   ledger bounds and debit/credit permissions
 
-ValidatedBatchPlan
-  immutable debit/credit operations
+Transfer / transfer sequence
+  immutable account-to-account operations
   explicit mechanism and period metadata
   preflight conservation and overflow checks
 
@@ -94,9 +95,8 @@ rules. Missing topology data is a validation error rather than an inferred
 default.
 
 The kernel does not schedule periods. A period handle is audit metadata only.
-Execution is single-threaded per context: a validated plan is valid only for
-the state snapshot against which it was prepared. Applying it to another
-snapshot fails with a version mismatch.
+Execution is single-threaded per context. A caller that builds a multi-transfer
+sequence must bind its execution evidence to the state snapshot it validated.
 
 Account creation and closure are explicit, checked lifecycle operations. The
 kernel may atomically create an account and apply its initial entries, but it
@@ -114,10 +114,9 @@ numeric helpers only when they have no population or economic semantics.
 
 1. Specify and implement opaque account handles, account metadata, and generic
    account/state keys.
-2. Rebuild pure and imperative interpreters against the account-only,
-   multi-currency contract.
-3. Add explicit account lifecycle and snapshot/version checks.
-4. Re-establish Stainless/reference proofs and equivalence/property tests.
+2. Rebuild pure interpreters against the account-only, multi-currency contract.
+3. Add explicit account lifecycle, transfer execution, and evidence checks.
+4. Re-establish Stainless/reference proofs and property tests.
 5. Delete the current Polish-specific model and update all repository tests and
    documentation to the new API and `com.amorfatisystems` namespace.
 6. Integrate the resulting kernel from `amor-fati-AB-SFC`, which supplies
