@@ -7,18 +7,18 @@ package com.amorfatisystems.ledger
   */
 object BatchExecutionContract:
 
-  type SectorSizeOf = AccountGroupId => Int
-  type BalanceAt    = (AccountGroupId, InstrumentId, Int) => Long
+  type SectorSizeOf = AccountPartitionId => Int
+  type BalanceAt    = (AccountPartitionId, InstrumentId, Int) => Long
 
   def validateBatch(
-      sectorSizeOf: SectorSizeOf,
+      partitionSizeOf: SectorSizeOf,
       balanceAt: BalanceAt,
       batch: BatchedFlow
   ): Either[String, Unit] = batch match
     case BatchedFlow.Scatter(from, to, amounts, targets, asset, _) =>
-      val fromSize = sectorSizeOf(from)
-      val toSize   = sectorSizeOf(to)
-      if amounts.length != fromSize then Left(s"Scatter amounts.length=${amounts.length} must equal sectorSize($from)=$fromSize")
+      val fromSize = partitionSizeOf(from)
+      val toSize   = partitionSizeOf(to)
+      if amounts.length != fromSize then Left(s"Scatter amounts.length=${amounts.length} must equal partitionSize($from)=$fromSize")
       else
         var i: Int                = 0
         var error: Option[String] = None
@@ -27,7 +27,7 @@ object BatchExecutionContract:
           if amount < 0L then error = Some(s"Scatter amount at index $i is negative: $amount")
           else if targets(i) < 0 || targets(i) >= toSize then
             error = Some(
-              s"Scatter target index at position $i out of bounds: ${targets(i)} for sectorSize($to)=$toSize"
+              s"Scatter target index at position $i out of bounds: ${targets(i)} for partitionSize($to)=$toSize"
             )
           else
             val fromBalance = balanceAt(from, asset, i)
@@ -45,9 +45,9 @@ object BatchExecutionContract:
         error.toLeft(())
 
     case BatchedFlow.Broadcast(from, fromIdx, to, amounts, targets, asset, _) =>
-      val fromSize = sectorSizeOf(from)
-      val toSize   = sectorSizeOf(to)
-      if fromIdx < 0 || fromIdx >= fromSize then Left(s"Broadcast fromIndex=$fromIdx out of bounds for sectorSize($from)=$fromSize")
+      val fromSize = partitionSizeOf(from)
+      val toSize   = partitionSizeOf(to)
+      if fromIdx < 0 || fromIdx >= fromSize then Left(s"Broadcast fromIndex=$fromIdx out of bounds for partitionSize($from)=$fromSize")
       else
         var i: Int                = 0
         var totalDebit: Long      = 0L
@@ -57,7 +57,7 @@ object BatchExecutionContract:
           if amount < 0L then error = Some(s"Broadcast amount at index $i is negative: $amount")
           else if targets(i) < 0 || targets(i) >= toSize then
             error = Some(
-              s"Broadcast target index at position $i out of bounds: ${targets(i)} for sectorSize($to)=$toSize"
+              s"Broadcast target index at position $i out of bounds: ${targets(i)} for partitionSize($to)=$toSize"
             )
           else if totalDebit > Long.MaxValue - amount then
             error = Some(s"Broadcast total debit would overflow Long at index $i: total=$totalDebit amount=$amount")
@@ -80,15 +80,15 @@ object BatchExecutionContract:
           else Right(())
 
   def canApplyBatch(
-      sectorSizeOf: SectorSizeOf,
+      partitionSizeOf: SectorSizeOf,
       balanceAt: BalanceAt,
       batch: BatchedFlow
   ): Boolean =
-    validateBatch(sectorSizeOf, balanceAt, batch).isRight
+    validateBatch(partitionSizeOf, balanceAt, batch).isRight
 
   def requireValidBatch(
-      sectorSizeOf: SectorSizeOf,
+      partitionSizeOf: SectorSizeOf,
       balanceAt: BalanceAt,
       batch: BatchedFlow
   ): Unit =
-    validateBatch(sectorSizeOf, balanceAt, batch).fold(msg => throw IllegalArgumentException(msg), identity)
+    validateBatch(partitionSizeOf, balanceAt, batch).fold(msg => throw IllegalArgumentException(msg), identity)

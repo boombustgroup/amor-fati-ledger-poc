@@ -2,42 +2,42 @@ package com.amorfatisystems.ledger
 
 /** Pure reference model for the imperative runtime interpreter.
   *
-  * This mirrors [[ImperativeInterpreter]] batch semantics on an immutable keyed state: `(sector, asset, index) -> balance`.
+  * This mirrors [[ImperativeInterpreter]] batch semantics on an immutable keyed state: `(partition, asset, index) -> balance`.
   */
 object RuntimeInterpreterReference:
 
-  type BalanceKey   = (AccountGroupId, InstrumentId, Int)
+  type BalanceKey   = (AccountPartitionId, InstrumentId, Int)
   type BalanceState = Map[BalanceKey, Long]
 
-  private def key(sector: AccountGroupId, asset: InstrumentId, index: Int): BalanceKey =
-    (sector, asset, index)
+  private def key(partition: AccountPartitionId, asset: InstrumentId, index: Int): BalanceKey =
+    (partition, asset, index)
 
   def snapshotToFlatMap(
       snapshot: BalanceState,
-      sectorOffsets: Map[AccountGroupId, Int],
+      partitionOffsets: Map[AccountPartitionId, Int],
       asset: InstrumentId
   ): Map[Int, Long] =
     snapshot.collect {
-      case ((sector, a, index), balance) if a == asset =>
-        (sectorOffsets(sector) + index) -> balance
+      case ((partition, a, index), balance) if a == asset =>
+        (partitionOffsets(partition) + index) -> balance
     }
 
-  private def update(state: BalanceState, sector: AccountGroupId, asset: InstrumentId, index: Int, delta: Long): BalanceState =
-    val k       = key(sector, asset, index)
+  private def update(state: BalanceState, partition: AccountPartitionId, asset: InstrumentId, index: Int, delta: Long): BalanceState =
+    val k       = key(partition, asset, index)
     val updated = state.getOrElse(k, 0L) + delta
     if updated == 0L then state - k else state.updated(k, updated)
 
-  def canApplyBatch(sectorSizes: Map[AccountGroupId, Int], state: BalanceState, batch: BatchedFlow): Boolean =
+  def canApplyBatch(partitionSizes: Map[AccountPartitionId, Int], state: BalanceState, batch: BatchedFlow): Boolean =
     BatchExecutionContract.canApplyBatch(
-      sector => sectorSizes.getOrElse(sector, 1),
-      (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
+      partition => partitionSizes.getOrElse(partition, 1),
+      (partition, asset, index) => state.getOrElse(key(partition, asset, index), 0L),
       batch
     )
 
-  def applyBatch(sectorSizes: Map[AccountGroupId, Int], state: BalanceState, batch: BatchedFlow): BalanceState =
+  def applyBatch(partitionSizes: Map[AccountPartitionId, Int], state: BalanceState, batch: BatchedFlow): BalanceState =
     BatchExecutionContract.requireValidBatch(
-      sector => sectorSizes.getOrElse(sector, 1),
-      (sector, asset, index) => state.getOrElse(key(sector, asset, index), 0L),
+      partition => partitionSizes.getOrElse(partition, 1),
+      (partition, asset, index) => state.getOrElse(key(partition, asset, index), 0L),
       batch
     )
     BatchDeltaSemantics.plan(batch) match
@@ -58,5 +58,5 @@ object RuntimeInterpreterReference:
         }
         update(afterCredits, from, asset, fromIdx, -totalDebit)
 
-  def applyAll(sectorSizes: Map[AccountGroupId, Int], state: BalanceState, flows: Vector[BatchedFlow]): BalanceState =
-    flows.foldLeft(state)((acc, batch) => applyBatch(sectorSizes, acc, batch))
+  def applyAll(partitionSizes: Map[AccountPartitionId, Int], state: BalanceState, flows: Vector[BatchedFlow]): BalanceState =
+    flows.foldLeft(state)((acc, batch) => applyBatch(partitionSizes, acc, batch))

@@ -4,8 +4,8 @@ import scala.collection.mutable
 
 /** Array-based mutable world state for imperative interpreter.
   *
-  * Data-Oriented Design: each (AccountGroupId, InstrumentId) pair maps to one Array[Long]. The interpreter does streaming reads + scattered
-  * writes — 7 banks fit in L1 cache, 100K households are sequential.
+  * Data-Oriented Design: each (AccountPartitionId, InstrumentId) pair maps to one Array[Long]. The interpreter does streaming reads + scattered
+  * writes over caller-defined account partitions.
   *
   * This is the imperative shell. The verified core (Verified.scala) uses immutable Map. Equivalence tests prove they produce identical
   * results bit-for-bit.
@@ -15,38 +15,44 @@ import scala.collection.mutable
   *   - public callers should prefer checked helpers like `balanceOption`, `setBalance`, and `adjustBalance`
   *   - `BatchExecutionContract` remains the main batched-flow guardrail for sequence execution
   */
-class MutableWorldState(private val sectorSizes: Map[AccountGroupId, Int]):
+class MutableWorldState(private val partitionSizes: Map[AccountPartitionId, Int]):
 
-  private val stores: mutable.Map[(AccountGroupId, InstrumentId), Array[Long]] = mutable.Map.empty
+  private val stores: mutable.Map[(AccountPartitionId, InstrumentId), Array[Long]] = mutable.Map.empty
+  private var version: Long = 0L
 
-  private def hasValidIndex(sector: AccountGroupId, index: Int): Boolean =
-    index >= 0 && index < sectorSize(sector)
+  /** Monotonic snapshot stamp used to reject stale validated plans. */
+  def snapshotVersion: Long = version
 
-  /** Low-level internal access to the backing array for a (sector, asset) pair. */
-  private[ledger] def getBalances(sector: AccountGroupId, asset: InstrumentId): Array[Long] =
-    stores.getOrElseUpdate((sector, asset), new Array[Long](sectorSize(sector)))
+  private[ledger] def markCommitted(): Unit = version = Math.addExact(version, 1L)
+
+  private def hasValidIndex(partition: AccountPartitionId, index: Int): Boolean =
+    index >= 0 && index < partitionSize(partition)
+
+  /** Low-level internal access to the backing array for a (partition, asset) pair. */
+  private[ledger] def getBalances(partition: AccountPartitionId, asset: InstrumentId): Array[Long] =
+    stores.getOrElseUpdate((partition, asset), new Array[Long](partitionSize(partition)))
 
   /** Checked read of a single balance. */
-  def balance(sector: AccountGroupId, asset: InstrumentId, index: Int): Long =
-    require(hasValidIndex(sector, index), s"Index $index out of bounds for sectorSize($sector)=${sectorSize(sector)}")
-    stores.get((sector, asset)).map(_(index)).getOrElse(0L)
+  def balance(partition: AccountPartitionId, asset: InstrumentId, index: Int): Long =
+    require(hasValidIndex(partition, index), s"Index $index out of bounds for partitionSize($partition)=${partitionSize(partition)}")
+    stores.get((partition, asset)).map(_(index)).getOrElse(0L)
 
   /** Safe read that returns `None` instead of throwing for an invalid index. */
-  def balanceOption(sector: AccountGroupId, asset: InstrumentId, index: Int): Option[Long] =
-    Option.when(hasValidIndex(sector, index))(stores.get((sector, asset)).map(_(index)).getOrElse(0L))
+  def balanceOption(partition: AccountPartitionId, asset: InstrumentId, index: Int): Option[Long] =
+    Option.when(hasValidIndex(partition, index))(stores.get((partition, asset)).map(_(index)).getOrElse(0L))
 
   /** Checked write of an absolute balance value. */
-  def setBalance(sector: AccountGroupId, asset: InstrumentId, index: Int, value: Long): Either[String, Unit] =
-    if !hasValidIndex(sector, index) then Left(s"Index $index out of bounds for sectorSize($sector)=${sectorSize(sector)}")
+  def setBalance(partition: AccountPartitionId, asset: InstrumentId, index: Int, value: Long): Either[String, Unit] =
+    if !hasValidIndex(partition, index) then Left(s"Index $index out of bounds for partitionSize($partition)=${partitionSize(partition)}")
     else
-      getBalances(sector, asset)(index) = value
+      getBalances(partition, asset)(index) = value
       Right(())
 
   /** Checked delta update that rejects out-of-bounds writes and Long overflow. */
-  def adjustBalance(sector: AccountGroupId, asset: InstrumentId, index: Int, delta: Long): Either[String, Unit] =
-    if !hasValidIndex(sector, index) then Left(s"Index $index out of bounds for sectorSize($sector)=${sectorSize(sector)}")
+  def adjustBalance(partition: AccountPartitionId, asset: InstrumentId, index: Int, delta: Long): Either[String, Unit] =
+    if !hasValidIndex(partition, index) then Left(s"Index $index out of bounds for partitionSize($partition)=${partitionSize(partition)}")
     else
-      val store   = getBalances(sector, asset)
+      val store   = getBalances(partition, asset)
       val current = store(index)
       val updated = BigInt(current) + BigInt(delta)
       if updated > BigInt(Long.MaxValue) then Left(s"Balance update would overflow Long at index $index: current=$current delta=$delta")
@@ -56,18 +62,18 @@ class MutableWorldState(private val sectorSizes: Map[AccountGroupId, Int]):
         store(index) = updated.toLong
         Right(())
 
-  /** Number of agents in a sector. */
-  def sectorSize(sector: AccountGroupId): Int =
-    sectorSizes.getOrElse(sector, 1)
+  /** Number of agents in a partition. */
+  def partitionSize(partition: AccountPartitionId): Int =
+    partitionSizes.getOrElse(partition, 0)
 
-  /** Read-only view of configured sector sizes for validated planning. */
-  def sectorSizesView: Map[AccountGroupId, Int] =
-    sectorSizes
+  /** Read-only view of configured partition sizes for validated planning. */
+  def partitionSizesView: Map[AccountPartitionId, Int] =
+    partitionSizes
 
   /** Snapshot all balances as immutable Map (for equivalence testing). */
-  def snapshot: Map[(AccountGroupId, InstrumentId, Int), Long] =
-    stores.flatMap { case ((sector, asset), arr) =>
-      arr.indices.filter(i => arr(i) != 0L).map(i => (sector, asset, i) -> arr(i))
+  def snapshot: Map[(AccountPartitionId, InstrumentId, Int), Long] =
+    stores.flatMap { case ((partition, asset), arr) =>
+      arr.indices.filter(i => arr(i) != 0L).map(i => (partition, asset, i) -> arr(i))
     }.toMap
 
   /** Total across all accounts for a given asset type. */

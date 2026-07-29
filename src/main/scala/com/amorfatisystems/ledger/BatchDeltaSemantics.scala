@@ -11,20 +11,20 @@ object BatchDeltaSemantics:
   final case class BroadcastCredit(targetIndex: Int, amount: Long)
 
   sealed trait BatchPlan:
-    def from: AccountGroupId
-    def to: AccountGroupId
+    def from: AccountPartitionId
+    def to: AccountPartitionId
     def asset: InstrumentId
 
   final case class ScatterPlan(
-      from: AccountGroupId,
-      to: AccountGroupId,
+      from: AccountPartitionId,
+      to: AccountPartitionId,
       asset: InstrumentId,
       deltas: Vector[ScatterDelta]
   ) extends BatchPlan
 
   final case class BroadcastPlan(
-      from: AccountGroupId,
-      to: AccountGroupId,
+      from: AccountPartitionId,
+      to: AccountPartitionId,
       asset: InstrumentId,
       fromIndex: Int,
       totalDebit: Long,

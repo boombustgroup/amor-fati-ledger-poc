@@ -5,7 +5,7 @@ package com.amorfatisystems.ledger
   * Constructing this wrapper proves, by executable checks, that every batch in the sequence is shape-valid and Long-safe when applied in
   * order to the current mutable world state snapshot.
   */
-final case class ValidatedBatchPlan private (batches: Vector[BatchedFlow])
+final case class ValidatedBatchPlan private (batches: Vector[BatchedFlow], snapshotVersion: Long)
 
 object ValidatedBatchPlan:
 
@@ -16,8 +16,8 @@ object ValidatedBatchPlan:
         acc.flatMap { _ =>
           BatchExecutionContract
             .validateBatch(
-              scratch.sectorSize,
-              (sector, asset, index) => scratch.balance(sector, asset, index),
+              scratch.partitionSize,
+              (partition, asset, index) => scratch.balance(partition, asset, index),
               batch
             )
             .map { _ =>
@@ -26,24 +26,24 @@ object ValidatedBatchPlan:
             }
         }
       }
-      .map(_ => ValidatedBatchPlan(batches))
+      .map(_ => ValidatedBatchPlan(batches, state.snapshotVersion))
 
   private final class MutableWorldStateSnapshot(state: MutableWorldState):
-    private val sectorSizes = Map.from(state.sectorSizesView)
+    private val partitionSizes = Map.from(state.partitionSizesView)
     private var balances    = state.snapshot
 
-    private def update(sector: AccountGroupId, asset: InstrumentId, index: Int, delta: Long): Unit =
-      val key     = (sector, asset, index)
+    private def update(partition: AccountPartitionId, asset: InstrumentId, index: Int, delta: Long): Unit =
+      val key     = (partition, asset, index)
       val updated = balances.getOrElse(key, 0L) + delta
       balances =
         if updated == 0L then balances - key
         else balances.updated(key, updated)
 
-    def sectorSize(sector: AccountGroupId): Int =
-      sectorSizes.getOrElse(sector, 1)
+    def partitionSize(partition: AccountPartitionId): Int =
+      partitionSizes.getOrElse(partition, 1)
 
-    def balance(sector: AccountGroupId, asset: InstrumentId, index: Int): Long =
-      balances.getOrElse((sector, asset, index), 0L)
+    def balance(partition: AccountPartitionId, asset: InstrumentId, index: Int): Long =
+      balances.getOrElse((partition, asset, index), 0L)
 
     def apply(batch: BatchedFlow): Unit =
       batch match

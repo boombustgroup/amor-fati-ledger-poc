@@ -5,8 +5,8 @@ import org.scalatest.matchers.should.Matchers
 
 class BatchDeltaSemanticsSpec extends AnyFlatSpec with Matchers:
 
-  private val GroupA    = AccountGroupId(1)
-  private val GroupB = AccountGroupId(3)
+  private val GroupA    = AccountPartitionId(1)
+  private val GroupB = AccountPartitionId(3)
   private val Asset = InstrumentId(1)
 
   "BatchDeltaSemantics.plan" should "extract explicit scatter deltas for non-zero entries only" in {

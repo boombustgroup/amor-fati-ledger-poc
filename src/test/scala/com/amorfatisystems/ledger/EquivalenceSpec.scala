@@ -14,9 +14,9 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
 
   private val NumGroupA          = 20
   private val NumGroupB       = 5
-  private val GroupA             = AccountGroupId(1)
-  private val GroupB          = AccountGroupId(3)
-  private val GroupC          = AccountGroupId(7)
+  private val GroupA             = AccountPartitionId(1)
+  private val GroupB          = AccountPartitionId(3)
+  private val GroupC          = AccountPartitionId(7)
   private val Asset          = InstrumentId(1)
   private val HhGroupBSizes   = Map(GroupA -> NumGroupA, GroupB -> NumGroupB)
   private val HhGroupBOffsets = Map(GroupA -> 0, GroupB -> NumGroupA)
@@ -287,7 +287,7 @@ class EquivalenceSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyC
     )
 
     val state    = new MutableWorldState(Map(GroupA -> NumGroupA, GroupC -> NumGroupC))
-    val refState = Map.empty[(AccountGroupId, InstrumentId, Int), Long]
+    val refState = Map.empty[(AccountPartitionId, InstrumentId, Int), Long]
 
     ImperativeInterpreter.canApplyBatch(state, batch) shouldBe false
     RuntimeInterpreterReference.canApplyBatch(HhGroupCSizes, refState, batch) shouldBe false

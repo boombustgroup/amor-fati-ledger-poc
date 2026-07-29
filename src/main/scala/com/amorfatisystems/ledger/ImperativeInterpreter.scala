@@ -3,7 +3,7 @@ package com.amorfatisystems.ledger
 /** Imperative flow interpreter — the fast production path.
   *
   * Applies BatchedFlows to MutableWorldState via Array[Long] scatter-writes. Cache-friendly: streaming read from amounts + targetIndices,
-  * scattered write to target sector (7 banks fit in L1).
+  * scattered write to target partition (7 banks fit in L1).
   *
   * Correctness guarantee: equivalence test proves this produces identical results to the pure Interpreter (which is formally verified by
   * Stainless/Z3). See EquivalenceSpec.
@@ -12,23 +12,23 @@ object ImperativeInterpreter:
 
   private def validateBatch(state: MutableWorldState, batch: BatchedFlow): Unit =
     BatchExecutionContract.requireValidBatch(
-      state.sectorSize,
-      (sector, asset, index) => state.balance(sector, asset, index),
+      state.partitionSize,
+      (partition, asset, index) => state.balance(partition, asset, index),
       batch
     )
 
   def canApplyBatch(state: MutableWorldState, batch: BatchedFlow): Boolean =
     BatchExecutionContract.canApplyBatch(
-      state.sectorSize,
-      (sector, asset, index) => state.balance(sector, asset, index),
+      state.partitionSize,
+      (partition, asset, index) => state.balance(partition, asset, index),
       batch
     )
 
   def applyCheckedBatch(state: MutableWorldState, batch: BatchedFlow): Either[String, Unit] =
     BatchExecutionContract
       .validateBatch(
-        state.sectorSize,
-        (sector, asset, index) => state.balance(sector, asset, index),
+        state.partitionSize,
+        (partition, asset, index) => state.balance(partition, asset, index),
         batch
       )
       .map(_ => applyBatch(state, batch))
@@ -40,6 +40,7 @@ object ImperativeInterpreter:
 
   /** Execute a batch sequence that has already been validated against the current state snapshot. */
   def applyValidatedPlan(state: MutableWorldState, plan: ValidatedBatchPlan): Unit =
+    require(state.snapshotVersion == plan.snapshotVersion, "Validated batch plan was prepared against a stale snapshot")
     applyAll(state, plan.batches)
 
   /** Preferred high-level entrypoint: validate the batch sequence against the current state snapshot, then execute it. */
@@ -69,6 +70,7 @@ object ImperativeInterpreter:
           toStore(credit.targetIndex) += credit.amount
           i += 1
         fromStore(fromIdx) -= totalDebit
+    state.markCommitted()
 
   /** Apply a sequence of batched flows.
     *

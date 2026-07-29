@@ -5,12 +5,12 @@ import org.scalatest.matchers.should.Matchers
 
 class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
 
-  private val GroupA    = AccountGroupId(1)
-  private val GroupB = AccountGroupId(3)
+  private val GroupA    = AccountPartitionId(1)
+  private val GroupB = AccountPartitionId(3)
   private val Asset = InstrumentId(1)
   private val Loan  = InstrumentId(3)
 
-  "MutableWorldState" should "reuse the same backing array for the same sector and asset" in {
+  "MutableWorldState" should "reuse the same backing array for the same partition and asset" in {
     val state  = new MutableWorldState(Map(GroupA -> 3, GroupB -> 2))
     val first  = state.getBalances(GroupA, Asset)
     val second = state.getBalances(GroupA, Asset)
@@ -21,7 +21,7 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.balance(GroupA, Asset, 0) shouldBe 123L
   }
 
-  it should "keep separate backing arrays for different sector or asset keys" in {
+  it should "keep separate backing arrays for different partition or asset keys" in {
     val state       = new MutableWorldState(Map(GroupA -> 3, GroupB -> 2))
     val hhDeposits  = state.getBalances(GroupA, Asset)
     val bankDeposit = state.getBalances(GroupB, Asset)
@@ -73,11 +73,11 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.totalForAsset(Loan) shouldBe 999L
   }
 
-  it should "default unknown sector sizes to 1" in {
+  it should "reject unknown partition sizes instead of inventing a slot" in {
     val state = new MutableWorldState(Map(GroupA -> 3))
 
-    state.sectorSize(GroupB) shouldBe 1
-    state.getBalances(GroupB, Asset).length shouldBe 1
+    state.partitionSize(GroupB) shouldBe 0
+    state.getBalances(GroupB, Asset).length shouldBe 0
   }
 
   it should "reject out-of-bounds writes through setBalance" in {
