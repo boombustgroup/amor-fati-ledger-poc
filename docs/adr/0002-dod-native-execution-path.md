@@ -53,6 +53,18 @@ The kernel will expose one immutable execution semantics for single transfers
 and ordered transfer sequences. Any optimized backend must implement that same
 semantics and pass equivalence tests against the reference interpreter.
 
+The arithmetic oracle is explicit: balances and transfer amounts are signed
+`Long` ledger units; individual transfer amounts are non-negative; preflight
+calculations use exact `BigInt` intermediates; and a commit is accepted only
+when every resulting balance and aggregate evidence total is representable as
+`Long`. Overflow or underflow is a typed rejection and never wrapping
+arithmetic. Transfers are applied in the order supplied by the plan, with no
+implicit reordering or rounding. Transfer execution performs integer debit and
+credit only; any currency scale conversion or allocation rounding belongs to
+the economy contract. `DistributeModel` retains its separately documented
+floor-with-residual rule. These rules apply identically to single transfers,
+ordered sequences, the `Map` reference interpreter, and every DOD backend.
+
 Production execution will use a data-oriented backend:
 
 - balances are stored in dense primitive arrays or equivalent contiguous
