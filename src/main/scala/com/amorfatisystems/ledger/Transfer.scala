@@ -18,9 +18,9 @@ object TransferValidator:
     for
       from <- topology.metadata(transfer.from)
       to   <- topology.metadata(transfer.to)
-      _ <- Either.cond(from.currency == to.currency, (), "Transfer currency mismatch")
-      _ <- Either.cond(from.canDebit, (), "Source account cannot be debited")
-      _ <- Either.cond(to.canCredit, (), "Target account cannot be credited")
+      _    <- Either.cond(from.currency == to.currency, (), "Transfer currency mismatch")
+      _    <- Either.cond(from.canDebit, (), "Source account cannot be debited")
+      _    <- Either.cond(to.canCredit, (), "Target account cannot be credited")
     yield ()
 
 object TransferExecutor:
@@ -48,14 +48,15 @@ object TransferExecutor:
       transfers: Vector[Transfer],
       snapshotVersion: Long
   ): Either[String, (Map[AccountId, Long], ExecutionEvidence)] =
-    transfers.foldLeft[Either[String, (Map[AccountId, Long], Vector[Transfer])]](Right((balances, Vector.empty))) {
-      case (stateEither, transfer) =>
+    transfers
+      .foldLeft[Either[String, (Map[AccountId, Long], Vector[Transfer])]](Right((balances, Vector.empty))) { case (stateEither, transfer) =>
         stateEither.flatMap { case (state, applied) =>
           execute(topology, state, transfer, snapshotVersion).map { case (next, _) => (next, applied :+ transfer) }
         }
-    }.flatMap { case (state, applied) =>
-      try
-        val total = applied.foldLeft(0L)((sum, transfer) => Math.addExact(sum, transfer.amount))
-        Right((state, ExecutionEvidence(applied, total, total, snapshotVersion)))
-      catch case _: ArithmeticException => Left("Transfer sequence evidence exceeds Long bounds")
-    }
+      }
+      .flatMap { case (state, applied) =>
+        try
+          val total = applied.foldLeft(0L)((sum, transfer) => Math.addExact(sum, transfer.amount))
+          Right((state, ExecutionEvidence(applied, total, total, snapshotVersion)))
+        catch case _: ArithmeticException => Left("Transfer sequence evidence exceeds Long bounds")
+      }

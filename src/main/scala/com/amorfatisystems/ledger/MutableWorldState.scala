@@ -4,8 +4,8 @@ import scala.collection.mutable
 
 /** Array-based mutable world state for imperative interpreter.
   *
-  * Data-Oriented Design: each (AccountPartitionId, InstrumentId) pair maps to one Array[Long]. The interpreter does streaming reads + scattered
-  * writes over caller-defined account partitions.
+  * Data-Oriented Design: each (AccountPartitionId, InstrumentId) pair maps to one Array[Long]. The interpreter does streaming reads +
+  * scattered writes over caller-defined account partitions.
   *
   * This is the imperative shell. The verified core (Verified.scala) uses immutable Map. Equivalence tests prove they produce identical
   * results bit-for-bit.
@@ -18,7 +18,7 @@ import scala.collection.mutable
 private[ledger] class MutableWorldState(private val partitionSizes: Map[AccountPartitionId, Int]):
 
   private val stores: mutable.Map[(AccountPartitionId, InstrumentId), Array[Long]] = mutable.Map.empty
-  private var version: Long = 0L
+  private var version: Long                                                        = 0L
 
   /** Monotonic snapshot stamp used to reject stale validated plans. */
   def snapshotVersion: Long = version

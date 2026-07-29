@@ -9,7 +9,7 @@ package com.amorfatisystems.ledger
 private[ledger] case class Flow(
     from: AccountId,
     to: AccountId,
-    amount: Long,  // monetary amount (scale-neutral integer ledger units)
+    amount: Long, // monetary amount (scale-neutral integer ledger units)
     mechanism: MechanismId
 ):
   require(from != to, s"Self-transfer: from=$from == to=$to")

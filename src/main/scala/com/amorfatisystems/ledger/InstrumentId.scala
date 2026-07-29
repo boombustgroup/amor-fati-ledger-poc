@@ -5,4 +5,4 @@ opaque type InstrumentId = Int
 
 object InstrumentId:
   def apply(value: Int): InstrumentId = value
-  def value(id: InstrumentId): Int = id
+  def value(id: InstrumentId): Int    = id

@@ -30,7 +30,8 @@ flowchart TD
 
 - A formally verified reference core in `src/main/scala-stainless/Verified.scala` proves conservation, frame conditions, sequential application, distribution exactness, and bounded runtime refinement properties.
 - The pure production interpreter is tested against shared reference semantics and explicit execution contracts.
-- Overflow, index bounds, batch shape, and non-negative amounts are checked explicitly on runtime execution paths.
+- Overflow, index bounds, transfer shape, and non-negative amounts are checked explicitly on runtime execution paths.
+- Account topology, currency compatibility, debit/credit permissions, lifecycle, and transfer-sequence evidence are checked by the generic transfer contract.
 - Distribution uses a shared pure executable model (`DistributeModel`) that is tested against both the production adapter and the verified `BigInt` shape.
 
 Full verification boundaries, trust-chain details, and architecture notes live in [docs/verification.md](docs/verification.md).
@@ -41,6 +42,8 @@ Full verification boundaries, trust-chain details, and architecture notes live i
   Pure `Map`-based execution with `canApplyFlow`, `canApplyAll`, `applyCheckedFlow`, and `applyCheckedAll`.
 - [Transfer.scala](src/main/scala/com/amorfatisystems/ledger/Transfer.scala)  
   Generic account-to-account transfer contract with currency and permission validation.
+- [GenericContractSpec.scala](src/test/scala/com/amorfatisystems/ledger/GenericContractSpec.scala)
+  Contract coverage for topology, transfers, lifecycle, evidence, overflow, and reference alignment.
 - [Distribute.scala](src/main/scala/com/amorfatisystems/ledger/Distribute.scala)  
   Production distribution adapter over the shared pure `DistributeModel`.
 - [verify.sh](verify.sh)  
@@ -67,7 +70,7 @@ sbt test
 - **Stainless** (EPFL) — formal verification for Scala, powered by Z3
 - **Z3** (Microsoft Research) — SMT solver
 - **ScalaCheck** — property-based testing
-- **Long-based arithmetic** — all amounts are `Long` (scale 10^4), avoiding floating-point error within bounded integer arithmetic
+- **Long-based arithmetic** — ledger units are signed `Long` values; currency/economy contracts define scale and presentation without floating-point arithmetic
 
 ## Further Reading
 

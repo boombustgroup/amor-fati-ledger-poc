@@ -5,4 +5,4 @@ opaque type PeriodId = Long
 
 object PeriodId:
   def apply(value: Long): PeriodId = value
-  def value(id: PeriodId): Long = id
+  def value(id: PeriodId): Long    = id

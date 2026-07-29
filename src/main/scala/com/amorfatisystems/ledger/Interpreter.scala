@@ -5,9 +5,8 @@ package com.amorfatisystems.ledger
   * Every operation preserves the SFC invariant: total system wealth is constant. Stainless/Z3 verifies this via pointwise conservation +
   * frame condition.
   *
-  * This is the pure reference specification. Runtime callers use the public
-  * TransferExecutor contract; this interpreter remains internal to the proof
-  * and property-test bridge.
+  * This is the pure reference specification. Runtime callers use the public TransferExecutor contract; this interpreter remains internal to
+  * the proof and property-test bridge.
   */
 object Interpreter:
 

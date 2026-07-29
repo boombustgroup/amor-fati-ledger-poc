@@ -5,4 +5,4 @@ opaque type AccountId = Int
 
 object AccountId:
   def apply(value: Int): AccountId = value
-  def value(id: AccountId): Int = id
+  def value(id: AccountId): Int    = id

@@ -5,10 +5,10 @@ import org.scalatest.matchers.should.Matchers
 
 class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
 
-  private val GroupA    = AccountPartitionId(1)
+  private val GroupA = AccountPartitionId(1)
   private val GroupB = AccountPartitionId(3)
-  private val Asset = InstrumentId(1)
-  private val Loan  = InstrumentId(3)
+  private val Asset  = InstrumentId(1)
+  private val Loan   = InstrumentId(3)
 
   "MutableWorldState" should "reuse the same backing array for the same partition and asset" in {
     val state  = new MutableWorldState(Map(GroupA -> 3, GroupB -> 2))
@@ -57,7 +57,7 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.setBalance(GroupB, Asset, 1, -11L) shouldBe Right(())
 
     state.snapshot shouldBe Map(
-      (GroupA, Asset, 0)    -> 11L,
+      (GroupA, Asset, 0) -> 11L,
       (GroupB, Asset, 1) -> -11L
     )
   }
