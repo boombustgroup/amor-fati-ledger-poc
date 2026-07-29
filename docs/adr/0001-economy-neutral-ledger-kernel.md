@@ -21,13 +21,15 @@ execution kernel.
 
 The kernel owns only:
 
-- opaque account, entity, instrument, currency, mechanism, and period handles;
-- signed or explicitly typed fixed-point amounts with checked arithmetic;
+- opaque account, currency, mechanism, and period handles;
+- account metadata for an optional instrument handle and currency handle;
+- signed integer ledger units with checked arithmetic; scale and presentation
+  are supplied by the currency/economy contract;
 - debit/credit flows and batched execution;
-- account-state storage and immutable execution plans;
+- account-state storage keyed by account handles and immutable execution plans;
 - conservation, bounds, overflow, atomicity, and reference/imperative
   equivalence contracts;
-- distribution primitives and their verified reference semantics.
+- explicit account lifecycle operations.
 
 The kernel does **not** own:
 
@@ -35,6 +37,7 @@ The kernel does **not** own:
 - instrument taxonomies such as Polish bonds, TFI units, or NBP reserves;
 - issuer, holder, ownership, settlement, or SFC matrix semantics;
 - money-creation policy, agent behaviour, market mechanisms, or calibration.
+- scatter/broadcast policies and population distributions.
 
 Those semantics are supplied by `amor-fati-AB-SFC` and economy-specific
 packages through typed handles and validated topology projections.
@@ -46,8 +49,10 @@ The following are removed rather than deprecated or wrapped:
 1. `EntitySector` and every Poland-specific sector member;
 2. the closed `AssetType` enum and all country-specific asset members;
 3. PLN scale and Poland-specific population assumptions in production code;
-4. state keys that require a sector or asset enum instead of opaque handles;
-5. APIs whose semantics silently default unknown entities or sectors.
+4. state keys that require a sector or asset enum instead of account handles;
+5. APIs whose semantics silently default unknown entities or sectors;
+6. kernel-level `Scatter`, `Broadcast`, and population-specific distribution
+   contracts.
 
 No compatibility adapter, dual API, or legacy namespace is part of the target
 architecture. Callers are migrated to the new contract in the same change
@@ -60,8 +65,8 @@ The public execution path must accept a fully validated topology projection:
 ```text
 LedgerTopology
   account handles and ownership of storage slots
-  instrument/currency handles
-  account capabilities and bounds
+  optional instrument/currency metadata per account
+  ledger bounds and debit/credit permissions
 
 ValidatedBatchPlan
   immutable debit/credit operations
@@ -70,22 +75,48 @@ ValidatedBatchPlan
 
 ExecutionResult
   new immutable state or committed mutable state
-  checked accounting evidence
+  checked execution evidence and snapshot/version stamp
 ```
 
-The ledger does not infer sectors, holders, issuers, currencies, or account
-creation rules from identifiers. Missing topology data is a validation error.
+The kernel is multi-currency: one instance may contain accounts denominated in
+different currencies. A transfer between accounts with incompatible currency
+metadata is rejected unless an explicit conversion operation is supplied by
+the caller. FX rates and conversion policy are outside the kernel.
+
+Instrument and currency handles are metadata, not storage dimensions. The
+kernel does not enforce issuer, holder, ownership, settlement, or SFC matrix
+rules. Missing topology data is a validation error rather than an inferred
+default.
+
+The kernel does not schedule periods. A period handle is audit metadata only.
+Execution is single-threaded per context: a validated plan is valid only for
+the state snapshot against which it was prepared. Applying it to another
+snapshot fails with a version mismatch.
+
+Account creation and closure are explicit, checked lifecycle operations. The
+kernel may atomically create an account and apply its initial entries, but it
+does not decide when an economic instrument is issued or destroyed.
+
+`CanIssue`, `CanBorrow`, `CanEmploy`, and related economic capabilities belong
+to `amor-fati-AB-SFC`. Kernel capabilities are limited to ledger bounds,
+debit/credit permissions, lifecycle permissions, and currency compatibility.
+
+Scatter, broadcast, and distribution policies are assembled above the kernel
+into ordinary validated debit/credit operations. The kernel may retain small
+numeric helpers only when they have no population or economic semantics.
 
 ## Migration sequence
 
-1. Specify and implement opaque handles and generic account/state keys.
-2. Move amount and currency semantics into explicit kernel types; retain
-   checked fixed-point arithmetic without a currency-specific scale.
-3. Rebuild pure and imperative interpreters against the generic contract.
+1. Specify and implement opaque account handles, account metadata, and generic
+   account/state keys.
+2. Rebuild pure and imperative interpreters against the account-only,
+   multi-currency contract.
+3. Add explicit account lifecycle and snapshot/version checks.
 4. Re-establish Stainless/reference proofs and equivalence/property tests.
 5. Delete the current Polish-specific model and update all repository tests and
    documentation to the new API.
-6. Integrate the resulting kernel from `amor-fati-AB-SFC`.
+6. Integrate the resulting kernel from `amor-fati-AB-SFC`, which supplies
+   instrument semantics, topology, and economic transitions.
 
 Each step must leave the repository compiling and tested, but intermediate
 steps are not compatibility releases. The first accepted implementation is
@@ -97,13 +128,17 @@ Positive:
 
 - the ledger can support PLN, EUR, USD, shared currencies, or synthetic
   currencies without changing its ontology;
+- multiple currencies can coexist in one ledger instance without embedding FX
+  policy in the kernel;
 - economy-specific semantics become explicit and testable above the kernel;
 - formal verification remains focused on accounting invariants.
 
 Costs:
 
 - the current API and all dependent callers must be rewritten;
+- account lifecycle and currency metadata become explicit contracts;
 - instrument and topology validation moves into `amor-fati-AB-SFC`;
+- scatter/distribution assembly moves above the kernel;
 - no incremental compatibility path is available.
 
 ## Rejected alternatives
