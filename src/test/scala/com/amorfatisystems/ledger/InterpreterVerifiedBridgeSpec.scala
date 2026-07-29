@@ -38,7 +38,7 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
     from   <- genAccountId
     to     <- genAccountId.suchThat(_ != from)
     amount <- genAmount
-  yield Flow(from, to, amount, mechanism = 0)
+  yield Flow(from, to, amount, mechanism = MechanismId(0))
 
   private val genFlows = Gen.listOfN(10, genFlow).map(_.toVector)
 

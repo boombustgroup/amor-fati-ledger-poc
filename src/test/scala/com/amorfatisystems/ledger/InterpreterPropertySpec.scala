@@ -15,7 +15,7 @@ class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckP
     from   <- genAccountId
     to     <- genAccountId.suchThat(_ != from)
     amount <- genAmount
-  yield Flow(from, to, amount, mechanism = 0)
+  yield Flow(from, to, amount, mechanism = MechanismId(0))
 
   private val genBalances = for
     n        <- Gen.choose(2, 20)
@@ -59,8 +59,8 @@ class InterpreterPropertySpec extends AnyFlatSpec with Matchers with ScalaCheckP
     forAll(genBalances, genAmount, genAmount) { (balances, amt1, amt2) =>
       whenever(balances.size >= 4) {
         val keys = balances.keys.toVector.sortBy(AccountId.value).take(4)
-        val f1   = Flow(keys(0), keys(1), amt1, 0)
-        val f2   = Flow(keys(2), keys(3), amt2, 1)
+        val f1   = Flow(keys(0), keys(1), amt1, MechanismId(0))
+        val f2   = Flow(keys(2), keys(3), amt2, MechanismId(1))
 
         val order1 = Interpreter.applyFlow(Interpreter.applyFlow(balances, f1), f2)
         val order2 = Interpreter.applyFlow(Interpreter.applyFlow(balances, f2), f1)
