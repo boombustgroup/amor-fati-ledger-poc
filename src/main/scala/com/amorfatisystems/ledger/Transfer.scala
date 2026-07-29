@@ -5,13 +5,19 @@ final case class Transfer(from: AccountId, to: AccountId, amount: Long, mechanis
   require(from != to, "Self-transfer is not permitted")
   require(amount >= 0L, "Transfer amount must be non-negative")
 
-final case class ExecutionEvidence(
+final case class ExecutionEvidence private (
     applied: Vector[Transfer],
     debitTotal: Long,
     creditTotal: Long,
     snapshotVersion: Long
 ):
+  require(debitTotal >= 0L && creditTotal >= 0L)
   require(debitTotal == creditTotal)
+  require(applied.foldLeft(BigInt(0))(_ + _.amount) == BigInt(debitTotal))
+
+object ExecutionEvidence:
+  def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, snapshotVersion: Long): ExecutionEvidence =
+    new ExecutionEvidence(applied, debitTotal, creditTotal, snapshotVersion)
 
 object TransferValidator:
   def validate(topology: LedgerTopology, transfer: Transfer): Either[String, Unit] =

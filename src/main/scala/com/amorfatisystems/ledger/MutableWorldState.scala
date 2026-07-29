@@ -17,6 +17,8 @@ import scala.collection.mutable
   */
 private[ledger] class MutableWorldState(private val partitionSizes: Map[AccountPartitionId, Int]):
 
+  require(partitionSizes.values.forall(_ >= 0), "Partition sizes must be non-negative")
+
   private val stores: mutable.Map[(AccountPartitionId, InstrumentId), Array[Long]] = mutable.Map.empty
   private var version: Long                                                        = 0L
 
@@ -46,6 +48,7 @@ private[ledger] class MutableWorldState(private val partitionSizes: Map[AccountP
     if !hasValidIndex(partition, index) then Left(s"Index $index out of bounds for partitionSize($partition)=${partitionSize(partition)}")
     else
       getBalances(partition, asset)(index) = value
+      markCommitted()
       Right(())
 
   /** Checked delta update that rejects out-of-bounds writes and Long overflow. */
@@ -60,6 +63,7 @@ private[ledger] class MutableWorldState(private val partitionSizes: Map[AccountP
         Left(s"Balance update would underflow Long at index $index: current=$current delta=$delta")
       else
         store(index) = updated.toLong
+        markCommitted()
         Right(())
 
   /** Number of agents in a partition. */
@@ -78,4 +82,8 @@ private[ledger] class MutableWorldState(private val partitionSizes: Map[AccountP
 
   /** Total across all accounts for a given asset type. */
   def totalForAsset(asset: InstrumentId): Long =
-    stores.collect { case ((_, a), arr) if a == asset => arr.sum }.sum
+    val total = stores.collect { case ((_, a), arr) if a == asset => arr }.foldLeft(BigInt(0)) { (sum, arr) =>
+      sum + arr.foldLeft(BigInt(0))(_ + _)
+    }
+    if !total.isValidLong then throw ArithmeticException("Asset total exceeds Long bounds")
+    total.toLong

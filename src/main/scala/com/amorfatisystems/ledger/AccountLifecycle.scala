@@ -5,6 +5,7 @@ enum AccountLifecycleError:
   case UnknownAccount(account: AccountId)
   case NonZeroBalance(account: AccountId, balance: Long)
   case InvalidMetadata(account: AccountId)
+  case InitialBalanceOutOfBounds(account: AccountId, balance: Long)
 
 /** Explicit account creation and closure operations. */
 object AccountLifecycle:
@@ -20,7 +21,9 @@ object AccountLifecycle:
       metadata: AccountMetadata,
       initialBalance: Long
   ): Either[AccountLifecycleError, (LedgerTopology, Map[AccountId, Long])] =
-    create(topology, account, metadata).map(nextTopology => (nextTopology, balances.updated(account, initialBalance)))
+    if topology.accounts.contains(account) then Left(AccountLifecycleError.AlreadyExists(account))
+    else if !metadata.accepts(initialBalance) then Left(AccountLifecycleError.InitialBalanceOutOfBounds(account, initialBalance))
+    else create(topology, account, metadata).map(nextTopology => (nextTopology, balances.updated(account, initialBalance)))
 
   def close(topology: LedgerTopology, balances: Map[AccountId, Long], account: AccountId): Either[AccountLifecycleError, LedgerTopology] =
     topology.accounts.get(account) match

@@ -90,6 +90,7 @@ class GenericContractSpec extends AnyFlatSpec with Matchers:
     val C       = AccountId(3)
     val created = AccountLifecycle.createWithInitialBalance(base, Map.empty, C, AccountMetadata(X), 10L)
     created.map(_._2(C)) shouldBe Right(10L)
+    AccountLifecycle.createWithInitialBalance(base, Map.empty, C, AccountMetadata(X, minBalance = Some(20L)), 10L).isLeft shouldBe true
     AccountLifecycle.create(base, A, AccountMetadata(X)).isLeft shouldBe true
     AccountLifecycle.create(base, C, AccountMetadata(X, minBalance = Some(10L), maxBalance = Some(1L))).isLeft shouldBe true
     AccountLifecycle.close(base, Map.empty, AccountId(99)).isLeft shouldBe true

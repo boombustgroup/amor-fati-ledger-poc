@@ -44,6 +44,10 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.balance(GroupA, Asset, 0) shouldBe 0L
   }
 
+  it should "reject negative partition sizes at construction" in {
+    an[IllegalArgumentException] should be thrownBy new MutableWorldState(Map(GroupA -> -1))
+  }
+
   it should "return None for invalid balanceOption lookups" in {
     val state = new MutableWorldState(Map(GroupA -> 3))
 
@@ -73,6 +77,14 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.totalForAsset(Loan) shouldBe 999L
   }
 
+  it should "reject totals that exceed Long bounds" in {
+    val state = new MutableWorldState(Map(GroupA -> 2))
+    state.setBalance(GroupA, Asset, 0, Long.MaxValue) shouldBe Right(())
+    state.setBalance(GroupA, Asset, 1, Long.MaxValue) shouldBe Right(())
+
+    an[ArithmeticException] should be thrownBy state.totalForAsset(Asset)
+  }
+
   it should "reject unknown partition sizes instead of inventing a slot" in {
     val state = new MutableWorldState(Map(GroupA -> 3))
 
@@ -95,6 +107,17 @@ class MutableWorldStateSpec extends AnyFlatSpec with Matchers:
     state.adjustBalance(GroupA, Asset, 0, -3L) shouldBe Right(())
 
     state.balance(GroupA, Asset, 0) shouldBe 12L
+  }
+
+  it should "advance the snapshot version only after successful mutations" in {
+    val state = new MutableWorldState(Map(GroupA -> 1))
+    state.snapshotVersion shouldBe 0L
+    state.setBalance(GroupA, Asset, 0, 10L) shouldBe Right(())
+    state.snapshotVersion shouldBe 1L
+    state.adjustBalance(GroupA, Asset, 0, 5L) shouldBe Right(())
+    state.snapshotVersion shouldBe 2L
+    state.adjustBalance(GroupA, Asset, 9, 1L).isLeft shouldBe true
+    state.snapshotVersion shouldBe 2L
   }
 
   it should "reject out-of-bounds delta updates through adjustBalance" in {
