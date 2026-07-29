@@ -1,7 +1,7 @@
 lazy val root = (project in file("."))
   .settings(
     name         := "amor-fati-ledger",
-    organization := "com.boombustgroup",
+    organization := "com.amorfatisystems",
     scalaVersion := "3.8.2", // Stainless standalone bundles its own 3.7.2 compiler — sbt version independent
     scalacOptions ++= Seq(
       "-deprecation",

@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -61,7 +61,7 @@ class DistributeSpec extends AnyFlatSpec with Matchers with ScalaCheckPropertyCh
     result.forall(_ >= 0L) shouldBe true
   }
 
-  it should "match the legacy list adapter" in {
+  it should "match the reference list projection" in {
     val genTotal  = Gen.choose(1L, 10000000000L)
     val genSize   = Gen.choose(1, 20)
     val genShares = genSize.flatMap(n => Gen.listOfN(n, Gen.choose(1L, 10000L)).map(_.toArray))

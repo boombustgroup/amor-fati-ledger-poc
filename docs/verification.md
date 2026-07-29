@@ -30,7 +30,8 @@ This is the reference model: primarily pure `Map[BigInt, BigInt]`, plus a verifi
 Production implementations are not themselves formally verified. They are tested against shared models and contracts.
 
 - **`Interpreter.scala`** — property-based tests, explicit `canApplyFlow` / `canApplyAll` overflow contracts, checked entrypoints, and a test bridge against an embedded `BigInt` reference shape for non-overflow inputs
-- **`ImperativeInterpreter.scala`** — bit-for-bit equivalence tests against both `Interpreter.scala` and a pure runtime reference model, explicit batch validation, checked contracts, `ValidatedBatchPlan`, preferred `planAndApplyAll`, and a shared `BatchDeltaSemantics` layer
+- **`TransferExecutor`** — contract tests for topology lookup, currency compatibility, permissions, bounds, sequence atomicity, lifecycle evidence, and overflow handling
+- **`Transfer.scala`** — typed account-to-account transfer contract with currency compatibility and debit/credit permission checks
 - **`MutableWorldState.scala`** — direct contract tests for sparse snapshots, per-asset totals, key separation, checked reads/writes, and backing-array reuse
 - **`DistributeModel.scala`** — canonical pure executable semantics for production floor-with-residual distribution, with `BigInt` internal accumulation to avoid hidden `Long` overflow in share-sum calculations
 - **`Distribute.scala`** — thin production adapter over `DistributeModel`
@@ -43,22 +44,17 @@ Stainless/Z3 proves → Verified.scala (reference model)
 Verified.scala proves → pure Map[Int, Long] interpreter semantics and flow-list refinement under executable anti-overflow preconditions
 InterpreterVerifiedBridgeSpec tests → Interpreter == embedded BigInt reference model (non-overflow inputs)
 InterpreterVerifiedBridgeSpec tests → Interpreter.applyAll == embedded BigInt reference model for non-overflow sequences
-EquivalenceSpec tests → RuntimeInterpreterReference == Interpreter (bit-for-bit)
-BatchDeltaSemanticsSpec tests → imperative and runtime-reference batch execution share one explicit delta semantics layer
-EquivalenceSpec tests → ImperativeInterpreter == RuntimeInterpreterReference (bit-for-bit)
+GenericContractSpec tests → TransferExecutor == Interpreter reference semantics for valid transfers
 InterpreterPropertySpec tests → Interpreter checks analogous properties to Verified.scala
 DistributeSpec tests → Distribute, DistributeReference, and DistributeModel share the same floor-with-residual semantics
 DistributeVerifiedBridgeSpec tests → DistributeModel == Verified floor-with-residual BigInt list shape
-DistributeVerifiedBridgeSpec tests → DistributeReference == DistributeModel legacy adapter compatibility
 ```
 
 Important distinction: `EquivalenceSpec` is a test, not a formal proof. It provides strong empirical evidence, not mathematical certainty.
 
 ### Layer 3: Not Yet Formally Verified
 
-- `DistributeModel.scala` is the canonical executable pure model of the production distribution algorithm and the primary bridge target for the Stainless proof shape, but there is still no direct Stainless proof over the production `Array[Long]` implementation
-- Batch dimensions, sender/target index bounds, non-negative amounts, and batch-level `Long` overflow safety are enforced at runtime by `BatchExecutionContract`, but that batch machinery is not itself formally verified
-- Imperative batch execution still mutates arrays directly; `BatchDeltaSemantics` reduces proof distance by isolating explicit debit/credit effects, but there is still no formal refinement proof for the array-mutation shell
+- `DistributeModel.scala` is the canonical population-neutral numeric helper and the primary bridge target for the Stainless proof shape, but there is still no direct Stainless proof over a production mutable implementation
 - `MutableWorldState` is not formally verified; direct contract tests cover storage semantics and checked access helpers, but internal package code can still reach mutable backing arrays for performance-sensitive paths
 - Direct proof bridge between runtime `Int/Long` and `BigInt` models is still partial; a bounded `BigInt` refinement step exists, but not a fully general cross-type embedding
 - Overflow safety is explicit on the pure interpreter path, but higher-level callers still mostly preserve these contracts rather than constructing them through dedicated bounded domain types

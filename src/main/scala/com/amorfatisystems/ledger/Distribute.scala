@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** Proportional distribution with floor-based residual plugging.
   *
@@ -12,9 +12,9 @@ object Distribute:
   /** Distribute total across shares. Last element gets residual.
     *
     * @param total
-    *   amount to distribute (scale 10^4)
+    *   amount to distribute in caller-defined integer ledger units
     * @param shares
-    *   proportional weights (scale 10^4, i.e. 5000 = 50%)
+    *   proportional integer weights
     * @return
     *   array of amounts summing to exactly `total`
     */

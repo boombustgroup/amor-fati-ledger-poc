@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 /** Canonical pure model for production floor-based residual distribution.
   *

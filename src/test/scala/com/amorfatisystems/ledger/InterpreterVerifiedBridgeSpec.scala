@@ -1,4 +1,4 @@
-package com.boombustgroup.ledger
+package com.amorfatisystems.ledger
 
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
@@ -24,13 +24,13 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
   private def applyBigIntAll(balances: Map[BigInt, BigInt], flows: Vector[BigIntFlowRef]): Map[BigInt, BigInt] =
     flows.foldLeft(balances)(applyBigIntFlow)
 
-  private def embedBalances(balances: Map[Int, Long]): Map[BigInt, BigInt] =
-    balances.iterator.map { case (k, v) => BigInt(k) -> BigInt(v) }.toMap
+  private def embedBalances(balances: Map[AccountId, Long]): Map[BigInt, BigInt] =
+    balances.iterator.map { case (k, v) => BigInt(AccountId.value(k)) -> BigInt(v) }.toMap
 
-  private def projectBalances(balances: Map[BigInt, BigInt]): Map[Int, Long] =
-    balances.iterator.map { case (k, v) => k.toInt -> v.toLong }.toMap
+  private def projectBalances(balances: Map[BigInt, BigInt]): Map[AccountId, Long] =
+    balances.iterator.map { case (k, v) => AccountId(k.toInt) -> v.toLong }.toMap
 
-  private val genAccountId = Gen.choose(0, 99)
+  private val genAccountId = Gen.choose(0, 99).map(AccountId(_))
   private val genAmount    = Gen.choose(1L, 1000000000L)
   private val genBalance   = Gen.choose(-1000000000L, 1000000000L)
 
@@ -38,14 +38,14 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
     from   <- genAccountId
     to     <- genAccountId.suchThat(_ != from)
     amount <- genAmount
-  yield Flow(from, to, amount, mechanism = 0)
+  yield Flow(from, to, amount, mechanism = MechanismId(0))
 
   private val genFlows = Gen.listOfN(10, genFlow).map(_.toVector)
 
   private val genBalances = for
     n        <- Gen.choose(2, 20)
     accounts <- Gen.listOfN(n, Gen.zip(genAccountId, genBalance))
-  yield accounts.toMap
+  yield accounts.map { case (k, v) => k -> v }.toMap
 
   "Interpreter.applyFlow" should "match the embedded BigInt reference model for non-overflow inputs" in {
     forAll(genBalances, genFlow) { (balances, flow) =>
@@ -53,7 +53,7 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
         val runtimeResult = Interpreter.applyFlow(balances, flow)
         val bigIntResult = applyBigIntFlow(
           embedBalances(balances),
-          BigIntFlowRef(BigInt(flow.from), BigInt(flow.to), BigInt(flow.amount))
+          BigIntFlowRef(BigInt(AccountId.value(flow.from)), BigInt(AccountId.value(flow.to)), BigInt(flow.amount))
         )
 
         runtimeResult shouldBe projectBalances(bigIntResult)
@@ -67,7 +67,7 @@ class InterpreterVerifiedBridgeSpec extends AnyFlatSpec with Matchers with Scala
         val runtimeResult = Interpreter.applyAll(balances, flows)
         val bigIntResult = applyBigIntAll(
           embedBalances(balances),
-          flows.map(flow => BigIntFlowRef(BigInt(flow.from), BigInt(flow.to), BigInt(flow.amount)))
+          flows.map(flow => BigIntFlowRef(BigInt(AccountId.value(flow.from)), BigInt(AccountId.value(flow.to)), BigInt(flow.amount)))
         )
 
         runtimeResult shouldBe projectBalances(bigIntResult)

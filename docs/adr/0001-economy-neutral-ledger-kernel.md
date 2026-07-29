@@ -29,9 +29,10 @@ The kernel owns only:
 - account metadata for an optional instrument handle and currency handle;
 - signed integer ledger units with checked arithmetic; scale and presentation
   are supplied by the currency/economy contract;
-- debit/credit flows and batched execution;
-- account-state storage keyed by account handles and immutable execution plans;
-- conservation, bounds, overflow, atomicity, and reference/imperative
+- debit/credit flows and immutable transfer sequences;
+- account-state storage exposed through account handles; any array partitioning
+  is an internal data-oriented layout detail;
+- conservation, bounds, overflow, atomicity, and reference/runtime
   equivalence contracts;
 - explicit account lifecycle operations.
 
@@ -73,8 +74,8 @@ LedgerTopology
   optional instrument/currency metadata per account
   ledger bounds and debit/credit permissions
 
-ValidatedBatchPlan
-  immutable debit/credit operations
+Transfer / transfer sequence
+  immutable account-to-account operations
   explicit mechanism and period metadata
   preflight conservation and overflow checks
 
@@ -94,9 +95,8 @@ rules. Missing topology data is a validation error rather than an inferred
 default.
 
 The kernel does not schedule periods. A period handle is audit metadata only.
-Execution is single-threaded per context: a validated plan is valid only for
-the state snapshot against which it was prepared. Applying it to another
-snapshot fails with a version mismatch.
+Execution is single-threaded per context. A caller that builds a multi-transfer
+sequence must bind its execution evidence to the state snapshot it validated.
 
 Account creation and closure are explicit, checked lifecycle operations. The
 kernel may atomically create an account and apply its initial entries, but it
@@ -114,10 +114,9 @@ numeric helpers only when they have no population or economic semantics.
 
 1. Specify and implement opaque account handles, account metadata, and generic
    account/state keys.
-2. Rebuild pure and imperative interpreters against the account-only,
-   multi-currency contract.
-3. Add explicit account lifecycle and snapshot/version checks.
-4. Re-establish Stainless/reference proofs and equivalence/property tests.
+2. Rebuild pure interpreters against the account-only, multi-currency contract.
+3. Add explicit account lifecycle, transfer execution, and evidence checks.
+4. Re-establish Stainless/reference proofs and property tests.
 5. Delete the current Polish-specific model and update all repository tests and
    documentation to the new API and `com.amorfatisystems` namespace.
 6. Integrate the resulting kernel from `amor-fati-AB-SFC`, which supplies
@@ -127,21 +126,15 @@ Each step must leave the repository compiling and tested, but intermediate
 steps are not compatibility releases. The first accepted implementation is
 the generic kernel.
 
-## Deferred implementation decisions
+## Resolved implementation constraints
 
-The following decisions are intentionally deferred until the first type-level
-implementation. They must be resolved before the corresponding production
-contracts are merged:
-
-1. **Storage layout:** decide whether the account-handle-to-slot layout is an
-   internal implementation detail or an explicitly supported storage contract.
-2. **Amount signedness:** define separate balance and flow-amount types, with
-   non-negative flow amounts and signed account balances unless a later
-   contract establishes a different invariant.
-3. **Distribution scope:** decide whether the pure `DistributeModel` remains
-   as a population-neutral numeric helper or is moved entirely to
-   `amor-fati-AB-SFC`; population-specific scatter and broadcast remain out of
-   the kernel in either case.
+1. **Storage layout:** `AccountPartitionId` and backing arrays are internal DOD
+   details. They are not part of the economy-facing semantic API.
+2. **Amount signedness:** transfer amounts are non-negative `Long` units;
+   account balances are signed `Long` values with checked arithmetic.
+3. **Distribution scope:** `DistributeModel` remains only as a population-
+   neutral numeric helper. Population-specific scatter and broadcast remain
+   outside the kernel.
 
 ## Consequences
 
