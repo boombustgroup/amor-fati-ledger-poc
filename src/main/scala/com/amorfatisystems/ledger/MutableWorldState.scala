@@ -15,7 +15,7 @@ import scala.collection.mutable
   *   - public callers should prefer checked helpers like `balanceOption`, `setBalance`, and `adjustBalance`
   *   - callers build validated `Transfer` operations before mutating state
   */
-class MutableWorldState(private val partitionSizes: Map[AccountPartitionId, Int]):
+private[ledger] class MutableWorldState(private val partitionSizes: Map[AccountPartitionId, Int]):
 
   private val stores: mutable.Map[(AccountPartitionId, InstrumentId), Array[Long]] = mutable.Map.empty
   private var version: Long = 0L

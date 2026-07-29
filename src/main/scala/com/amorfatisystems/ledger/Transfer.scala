@@ -27,7 +27,8 @@ object TransferExecutor:
   def execute(
       topology: LedgerTopology,
       balances: Map[AccountId, Long],
-      transfer: Transfer
+      transfer: Transfer,
+      snapshotVersion: Long = 0L
   ): Either[String, (Map[AccountId, Long], ExecutionEvidence)] =
     for
       _ <- TransferValidator.validate(topology, transfer)
@@ -39,4 +40,20 @@ object TransferExecutor:
       _ <- Either.cond(topology.accounts(transfer.from).accepts(nextFrom.toLong), (), "Source balance bounds reject debit")
       _ <- Either.cond(topology.accounts(transfer.to).accepts(nextTo.toLong), (), "Target balance bounds reject credit")
       next = balances.updated(transfer.from, nextFrom.toLong).updated(transfer.to, nextTo.toLong)
-    yield (next, ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, 0L))
+    yield (next, ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, snapshotVersion))
+
+  def executeSequence(
+      topology: LedgerTopology,
+      balances: Map[AccountId, Long],
+      transfers: Vector[Transfer],
+      snapshotVersion: Long = 0L
+  ): Either[String, (Map[AccountId, Long], ExecutionEvidence)] =
+    transfers.foldLeft[Either[String, (Map[AccountId, Long], Vector[Transfer])]](Right((balances, Vector.empty))) {
+      case (stateEither, transfer) =>
+        stateEither.flatMap { case (state, applied) =>
+          execute(topology, state, transfer, snapshotVersion).map { case (next, _) => (next, applied :+ transfer) }
+        }
+    }.map { case (state, applied) =>
+      val total = applied.foldLeft(0L)((sum, transfer) => Math.addExact(sum, transfer.amount))
+      (state, ExecutionEvidence(applied, total, total, snapshotVersion))
+    }
