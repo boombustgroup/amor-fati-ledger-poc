@@ -22,3 +22,21 @@ object TransferValidator:
       _ <- Either.cond(from.canDebit, (), "Source account cannot be debited")
       _ <- Either.cond(to.canCredit, (), "Target account cannot be credited")
     yield ()
+
+object TransferExecutor:
+  def execute(
+      topology: LedgerTopology,
+      balances: Map[AccountId, Long],
+      transfer: Transfer
+  ): Either[String, (Map[AccountId, Long], ExecutionEvidence)] =
+    for
+      _ <- TransferValidator.validate(topology, transfer)
+      fromBalance = balances.getOrElse(transfer.from, 0L)
+      toBalance   = balances.getOrElse(transfer.to, 0L)
+      nextFrom    = BigInt(fromBalance) - BigInt(transfer.amount)
+      nextTo      = BigInt(toBalance) + BigInt(transfer.amount)
+      _ <- Either.cond(nextFrom.isValidLong && nextTo.isValidLong, (), "Transfer exceeds Long bounds")
+      _ <- Either.cond(topology.accounts(transfer.from).accepts(nextFrom.toLong), (), "Source balance bounds reject debit")
+      _ <- Either.cond(topology.accounts(transfer.to).accepts(nextTo.toLong), (), "Target balance bounds reject credit")
+      next = balances.updated(transfer.from, nextFrom.toLong).updated(transfer.to, nextTo.toLong)
+    yield (next, ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, 0L))
