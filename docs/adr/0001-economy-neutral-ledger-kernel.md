@@ -14,6 +14,10 @@ ledger kernel.
 The project will make a clean contract break. We will not preserve a legacy
 API and will not introduce an adapter for the current model.
 
+The repository namespace is also part of this clean break: the canonical base
+package is `com.amorfatisystems`. The former `com.boombustgroup` namespace is
+not retained as a compatibility namespace.
+
 ## Decision
 
 `amor-fati-ledger` becomes an economy-neutral, currency-neutral double-entry
@@ -53,6 +57,7 @@ The following are removed rather than deprecated or wrapped:
 5. APIs whose semantics silently default unknown entities or sectors;
 6. kernel-level `Scatter`, `Broadcast`, and population-specific distribution
    contracts.
+7. the `com.boombustgroup` package namespace.
 
 No compatibility adapter, dual API, or legacy namespace is part of the target
 architecture. Callers are migrated to the new contract in the same change
@@ -114,7 +119,7 @@ numeric helpers only when they have no population or economic semantics.
 3. Add explicit account lifecycle and snapshot/version checks.
 4. Re-establish Stainless/reference proofs and equivalence/property tests.
 5. Delete the current Polish-specific model and update all repository tests and
-   documentation to the new API.
+   documentation to the new API and `com.amorfatisystems` namespace.
 6. Integrate the resulting kernel from `amor-fati-AB-SFC`, which supplies
    instrument semantics, topology, and economic transitions.
 
