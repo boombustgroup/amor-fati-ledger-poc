@@ -28,7 +28,7 @@ object TransferExecutor:
       topology: LedgerTopology,
       balances: Map[AccountId, Long],
       transfer: Transfer,
-      snapshotVersion: Long = 0L
+      snapshotVersion: Long
   ): Either[String, (Map[AccountId, Long], ExecutionEvidence)] =
     for
       _ <- TransferValidator.validate(topology, transfer)
@@ -46,14 +46,16 @@ object TransferExecutor:
       topology: LedgerTopology,
       balances: Map[AccountId, Long],
       transfers: Vector[Transfer],
-      snapshotVersion: Long = 0L
+      snapshotVersion: Long
   ): Either[String, (Map[AccountId, Long], ExecutionEvidence)] =
     transfers.foldLeft[Either[String, (Map[AccountId, Long], Vector[Transfer])]](Right((balances, Vector.empty))) {
       case (stateEither, transfer) =>
         stateEither.flatMap { case (state, applied) =>
           execute(topology, state, transfer, snapshotVersion).map { case (next, _) => (next, applied :+ transfer) }
         }
-    }.map { case (state, applied) =>
-      val total = applied.foldLeft(0L)((sum, transfer) => Math.addExact(sum, transfer.amount))
-      (state, ExecutionEvidence(applied, total, total, snapshotVersion))
+    }.flatMap { case (state, applied) =>
+      try
+        val total = applied.foldLeft(0L)((sum, transfer) => Math.addExact(sum, transfer.amount))
+        Right((state, ExecutionEvidence(applied, total, total, snapshotVersion)))
+      catch case _: ArithmeticException => Left("Transfer sequence evidence exceeds Long bounds")
     }
