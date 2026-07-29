@@ -1,6 +1,6 @@
 # ADR-0001: Economy-Neutral Ledger Kernel
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-29
 
 ## Context
