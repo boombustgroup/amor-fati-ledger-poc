@@ -1,7 +1,7 @@
 package com.amorfatisystems.ledger
 
 /** A validated account-to-account operation for the generic kernel. */
-final case class Transfer(from: AccountId, to: AccountId, amount: Long, mechanism: MechanismId, period: Long):
+final case class Transfer(from: AccountId, to: AccountId, amount: Long, mechanism: MechanismId, period: PeriodId):
   require(from != to, "Self-transfer is not permitted")
   require(amount >= 0L, "Transfer amount must be non-negative")
 

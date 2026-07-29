@@ -29,7 +29,7 @@ The kernel owns only:
 - account metadata for an optional instrument handle and currency handle;
 - signed integer ledger units with checked arithmetic; scale and presentation
   are supplied by the currency/economy contract;
-- debit/credit flows and batched execution;
+- debit/credit flows and immutable transfer sequences;
 - account-state storage exposed through account handles; any array partitioning
   is an internal data-oriented layout detail;
 - conservation, bounds, overflow, atomicity, and reference/imperative
@@ -126,21 +126,15 @@ Each step must leave the repository compiling and tested, but intermediate
 steps are not compatibility releases. The first accepted implementation is
 the generic kernel.
 
-## Deferred implementation decisions
+## Resolved implementation constraints
 
-The following decisions are intentionally deferred until the first type-level
-implementation. They must be resolved before the corresponding production
-contracts are merged:
-
-1. **Storage layout:** decide whether the account-handle-to-slot layout is an
-   internal implementation detail or an explicitly supported storage contract.
-2. **Amount signedness:** define separate balance and flow-amount types, with
-   non-negative flow amounts and signed account balances unless a later
-   contract establishes a different invariant.
-3. **Distribution scope:** decide whether the pure `DistributeModel` remains
-   as a population-neutral numeric helper or is moved entirely to
-   `amor-fati-AB-SFC`; population-specific scatter and broadcast remain out of
-   the kernel in either case.
+1. **Storage layout:** `AccountPartitionId` and backing arrays are internal DOD
+   details. They are not part of the economy-facing semantic API.
+2. **Amount signedness:** transfer amounts are non-negative `Long` units;
+   account balances are signed `Long` values with checked arithmetic.
+3. **Distribution scope:** `DistributeModel` remains only as a population-
+   neutral numeric helper. Population-specific scatter and broadcast remain
+   outside the kernel.
 
 ## Consequences
 
