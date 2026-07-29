@@ -32,7 +32,7 @@ The kernel owns only:
 - debit/credit flows and immutable transfer sequences;
 - account-state storage exposed through account handles; any array partitioning
   is an internal data-oriented layout detail;
-- conservation, bounds, overflow, atomicity, and reference/imperative
+- conservation, bounds, overflow, atomicity, and reference/runtime
   equivalence contracts;
 - explicit account lifecycle operations.
 
