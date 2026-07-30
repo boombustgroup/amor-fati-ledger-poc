@@ -83,9 +83,12 @@ object LedgerStateLifecycle:
       state: LedgerState,
       account: AccountId,
       metadata: AccountMetadata,
-      initialBalance: Long
+      initialBalance: Long,
+      expectedVersion: Long = Long.MinValue
   ): Either[ExecutionRejection, LedgerState] =
-    if state.topology.accounts.contains(account) then
+    val version = if expectedVersion == Long.MinValue then state.version else expectedVersion
+    if version != state.version then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, state.version))
+    else if state.topology.accounts.contains(account) then
       Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, state.version))
     else if state.topology.accounts.size >= state.preparedCapacity then
       Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, state.version))
@@ -107,11 +110,14 @@ object LedgerStateLifecycle:
           )
         }
 
-  def close(state: LedgerState, account: AccountId): Either[ExecutionRejection, LedgerState] =
-    AccountLifecycle
-      .close(state.topology, state.balances, account)
-      .left
-      .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, state.version))
-      .map { topology =>
-        LedgerState.make(topology, state.balances - account, Math.addExact(state.version, 1L), state.preparedCapacity, state.id)
-      }
+  def close(state: LedgerState, account: AccountId, expectedVersion: Long = Long.MinValue): Either[ExecutionRejection, LedgerState] =
+    val version = if expectedVersion == Long.MinValue then state.version else expectedVersion
+    if version != state.version then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, state.version))
+    else
+      AccountLifecycle
+        .close(state.topology, state.balances, account)
+        .left
+        .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, state.version))
+        .map { topology =>
+          LedgerState.make(topology, state.balances - account, Math.addExact(state.version, 1L), state.preparedCapacity, state.id)
+        }
