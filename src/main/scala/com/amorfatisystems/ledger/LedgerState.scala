@@ -8,6 +8,17 @@ final case class LedgerState private (
     preparedCapacity: Int
 )
 
+enum ExecutionRejectionReason:
+  case Overflow
+  case Bounds
+  case CurrencyMismatch
+  case PermissionDenied
+  case AtomicityViolation
+  case VersionMismatch
+  case LifecycleViolation
+
+final case class ExecutionRejection(position: Option[Int], reason: ExecutionRejectionReason, snapshotVersion: Long)
+
 object LedgerState:
   private[ledger] def make(topology: LedgerTopology, balances: Map[AccountId, Long], version: Long, preparedCapacity: Int): LedgerState =
     new LedgerState(topology, balances, version, preparedCapacity)
@@ -26,29 +37,37 @@ object LedgerState:
 
 /** Atomic execution over a single logical snapshot. */
 object LedgerStateExecutor:
-  def execute(state: LedgerState, transfer: Transfer, expectedVersion: Long): Either[String, (LedgerState, ExecutionEvidence)] =
-    if state.version != expectedVersion then Left(s"VersionMismatch: expected=$expectedVersion actual=${state.version}")
+  def execute(state: LedgerState, transfer: Transfer, expectedVersion: Long): Either[ExecutionRejection, (LedgerState, ExecutionEvidence)] =
+    if state.version != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, state.version))
     else
-      TransferExecutor.execute(state.topology, state.balances, transfer, state.version).map { case (nextBalances, _) =>
-        val nextVersion = Math.addExact(state.version, 1L)
-        val evidence    = ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, state.version, nextVersion)
-        (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
-      }
+      TransferExecutor
+        .execute(state.topology, state.balances, transfer, state.version)
+        .map { case (nextBalances, _) =>
+          val nextVersion = Math.addExact(state.version, 1L)
+          val evidence    = ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, state.version, nextVersion)
+          (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
+        }
+        .left
+        .map(_ => ExecutionRejection(Some(0), ExecutionRejectionReason.Bounds, state.version))
 
   def executeSequence(
       state: LedgerState,
       transfers: Vector[Transfer],
       expectedVersion: Long
-  ): Either[String, (LedgerState, ExecutionEvidence)] =
-    if state.version != expectedVersion then Left(s"VersionMismatch: expected=$expectedVersion actual=${state.version}")
+  ): Either[ExecutionRejection, (LedgerState, ExecutionEvidence)] =
+    if state.version != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, state.version))
     else
-      TransferExecutor.executeSequence(state.topology, state.balances, transfers, state.version).map { case (nextBalances, _) =>
-        val nextVersion = Math.addExact(state.version, 1L)
-        val total       = transfers.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
-        if !total.isValidLong then throw ArithmeticException("Transfer sequence evidence exceeds Long bounds")
-        val evidence = ExecutionEvidence(transfers, total.toLong, total.toLong, state.version, nextVersion)
-        (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
-      }
+      TransferExecutor
+        .executeSequence(state.topology, state.balances, transfers, state.version)
+        .map { case (nextBalances, _) =>
+          val nextVersion = Math.addExact(state.version, 1L)
+          val total       = transfers.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
+          if !total.isValidLong then throw ArithmeticException("Transfer sequence evidence exceeds Long bounds")
+          val evidence = ExecutionEvidence(transfers, total.toLong, total.toLong, state.version, nextVersion)
+          (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
+        }
+        .left
+        .map(_ => ExecutionRejection(None, ExecutionRejectionReason.AtomicityViolation, state.version))
 
 object LedgerStateLifecycle:
   def create(state: LedgerState, account: AccountId, metadata: AccountMetadata, initialBalance: Long): Either[String, LedgerState] =

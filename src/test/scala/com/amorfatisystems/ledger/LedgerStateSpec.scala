@@ -30,7 +30,9 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
   it should "reject stale versions without changing the input state" in {
     val state = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
 
-    LedgerStateExecutor.execute(state, Transfer(A, B, 20L, M, P), expectedVersion = 7L).isLeft shouldBe true
+    val rejection = LedgerStateExecutor.execute(state, Transfer(A, B, 20L, M, P), expectedVersion = 7L).left.toOption.get
+    rejection.reason shouldBe ExecutionRejectionReason.VersionMismatch
+    rejection.snapshotVersion shouldBe 0L
     state.version shouldBe 0L
     state.balances shouldBe Map(A -> 50L, B -> 0L)
   }
