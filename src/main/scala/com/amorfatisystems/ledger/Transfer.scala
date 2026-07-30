@@ -10,34 +10,60 @@ final case class Transfer(from: AccountId, to: AccountId, amount: Long, mechanis
   require(from != to, "Self-transfer is not permitted")
   require(amount >= 0L, "Transfer amount must be non-negative")
 
-/** Immutable evidence emitted after a checked transfer or transfer sequence.
-  *
-  * The private constructor prevents callers from bypassing the conservation and total consistency checks. `snapshotVersion` identifies the
-  * state snapshot against which the operation was validated; it is metadata and does not schedule execution.
-  */
-final case class ExecutionEvidence private (
+sealed trait ExecutionEvidence:
+  def applied: Vector[Transfer]
+  def debitTotal: Long
+  def creditTotal: Long
+  def inputVersion: Long
+  def outputVersion: Long
+  def snapshotVersion: Long = outputVersion
+
+/** Immutable transfer-log evidence emitted after checked execution. */
+final case class TransferLogEvidence private (
     applied: Vector[Transfer],
     debitTotal: Long,
     creditTotal: Long,
     inputVersion: Long,
     outputVersion: Long
-):
+) extends ExecutionEvidence:
   require(debitTotal >= 0L && creditTotal >= 0L)
   require(debitTotal == creditTotal)
   require(applied.foldLeft(BigInt(0))(_ + _.amount) == BigInt(debitTotal))
 
+object TransferLogEvidence:
+  def create(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, inputVersion: Long, outputVersion: Long): TransferLogEvidence =
+    new TransferLogEvidence(applied, debitTotal, creditTotal, inputVersion, outputVersion)
+
+/** Aggregated evidence grouped by currency, accounts, and mechanism. */
+final case class AggregatedEvidence private (
+    groups: Vector[AggregatedTransfer],
+    debitTotal: Long,
+    creditTotal: Long,
+    inputVersion: Long,
+    outputVersion: Long
+) extends ExecutionEvidence:
+  val applied: Vector[Transfer] = Vector.empty
+  require(debitTotal >= 0L && creditTotal >= 0L)
+  require(debitTotal == creditTotal)
+
+object AggregatedEvidence:
+  def create(
+      groups: Vector[AggregatedTransfer],
+      debitTotal: Long,
+      creditTotal: Long,
+      inputVersion: Long,
+      outputVersion: Long
+  ): AggregatedEvidence =
+    new AggregatedEvidence(groups, debitTotal, creditTotal, inputVersion, outputVersion)
+
 object ExecutionEvidence:
   /** Construct evidence only when all supplied totals agree with `applied`. */
   def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, inputVersion: Long, outputVersion: Long): ExecutionEvidence =
-    new ExecutionEvidence(applied, debitTotal, creditTotal, inputVersion, outputVersion)
+    TransferLogEvidence.create(applied, debitTotal, creditTotal, inputVersion, outputVersion)
 
   /** Legacy reference-helper constructor where validation and commit share one stamp. */
   def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, snapshotVersion: Long): ExecutionEvidence =
     apply(applied, debitTotal, creditTotal, snapshotVersion, snapshotVersion)
-
-extension (evidence: ExecutionEvidence)
-  /** Output stamp retained as a convenient name for reference-helper callers. */
-  def snapshotVersion: Long = evidence.outputVersion
 
 object TransferValidator:
   /** Validate topology-level prerequisites without changing balances. */

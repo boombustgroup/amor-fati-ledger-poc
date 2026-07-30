@@ -24,7 +24,7 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     result.map(_._2.inputVersion) shouldBe Right(0L)
     result.map(_._2.outputVersion) shouldBe Right(1L)
     state.version shouldBe 0L
-    state.balances shouldBe Map(A -> 50L, B -> 0L)
+    state.balances shouldBe Map(A -> 50L)
   }
 
   it should "reject stale versions without changing the input state" in {
@@ -34,16 +34,16 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     rejection.reason shouldBe ExecutionRejectionReason.VersionMismatch
     rejection.snapshotVersion shouldBe 0L
     state.version shouldBe 0L
-    state.balances shouldBe Map(A -> 50L, B -> 0L)
+    state.balances shouldBe Map(A -> 50L)
   }
 
   it should "advance once for a successful no-op sequence" in {
     val state = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
 
     val result = LedgerStateExecutor.executeSequence(state, Vector.empty, expectedVersion = 0L)
-    result.map(_._1.version) shouldBe Right(1L)
+    result.map(_._1.version) shouldBe Right(0L)
     result.map(_._2.inputVersion) shouldBe Right(0L)
-    result.map(_._2.outputVersion) shouldBe Right(1L)
+    result.map(_._2.outputVersion) shouldBe Right(0L)
   }
 
   it should "preserve the state when a sequence fails" in {
@@ -52,7 +52,7 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
 
     LedgerStateExecutor.executeSequence(state, transfers, expectedVersion = 0L).isLeft shouldBe true
     state.version shouldBe 0L
-    state.balances shouldBe Map(A -> 50L, B -> 0L)
+    state.balances shouldBe Map(A -> 50L)
   }
 
   it should "enforce prepared capacity for lifecycle creation" in {
@@ -80,7 +80,7 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     )
 
     result.map(_._1.balances) shouldBe Right(Map(A -> 35L, B -> 15L))
-    result.map(_._2.toOption.get.head.amount) shouldBe Right(15L)
+    result.map { case (_, evidence) => evidence.asInstanceOf[AggregatedEvidence].groups.head.amount } shouldBe Right(15L)
     backend.version shouldBe 1L
   }
 
@@ -91,4 +91,30 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     backend.execute(Vector(Transfer(A, B, 20L, M, P), Transfer(A, B, 90L, M, P)), 0L).isLeft shouldBe true
     backend.version shouldBe 0L
     backend.snapshot.balances shouldBe Map(A -> 50L)
+  }
+
+  it should "match reference execution across deterministic randomized batches" in {
+    val random    = new scala.util.Random(17L)
+    var reference = LedgerState.initial(topology, Map(A -> 50L, B -> 0L), preparedCapacity = 3).toOption.get
+    val dense     = DenseLedgerBackend.prepare(reference)
+    (0 until 20).foreach { _ =>
+      val amount   = random.nextInt(2).toLong
+      val transfer = Transfer(A, B, amount, M, P)
+      val expected = LedgerStateExecutor.execute(reference, transfer, reference.version).toOption.get
+      val actual   = dense.execute(Vector(transfer), dense.version).toOption.get
+      actual._1.balances shouldBe expected._1.balances
+      actual._1.version shouldBe expected._1.version
+      actual._2.inputVersion shouldBe expected._2.inputVersion
+      actual._2.outputVersion shouldBe expected._2.outputVersion
+      actual._2.debitTotal shouldBe expected._2.debitTotal
+      reference = expected._1
+    }
+  }
+
+  it should "reject a stale dense snapshot" in {
+    val state = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
+    val dense = DenseLedgerBackend.prepare(state)
+
+    dense.execute(Vector(Transfer(A, B, 1L, M, P)), expectedVersion = 9L).left.toOption.get.reason shouldBe
+      ExecutionRejectionReason.VersionMismatch
   }
