@@ -103,7 +103,7 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
       val expected = LedgerStateExecutor.execute(reference, transfer, reference.version).toOption.get
       val actual   = dense.execute(Vector(transfer), dense.version).toOption.get
       dense.snapshot.balances shouldBe expected._1.balances
-      dense.snapshot.version shouldBe expected._1.version
+      dense.version shouldBe expected._1.version
       actual.inputVersion shouldBe expected._2.inputVersion
       actual.outputVersion shouldBe expected._2.outputVersion
       actual.debitTotal shouldBe expected._2.debitTotal
@@ -126,6 +126,8 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
 
     val expected = LedgerStateExecutor.execute(state, transfer, 0L).toOption.get
     val actual   = dense.execute(Vector(transfer), 0L).toOption.get
+    actual.inputVersion shouldBe 0L
+    actual.outputVersion shouldBe 1L
     dense.snapshot.balances shouldBe expected._1.balances
     dense.snapshot.balances shouldBe Map(B -> 50L)
   }
@@ -151,4 +153,25 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
 
     val unknown = LedgerStateExecutor.execute(state, Transfer(AccountId(99), B, 1L, M, P), 0L).left.toOption.get
     unknown.reason shouldBe ExecutionRejectionReason.LifecycleViolation
+  }
+
+  it should "produce independent dense forks from an on-demand snapshot" in {
+    val state = LedgerState.initial(topology, Map(A -> 100L, B -> 0L), preparedCapacity = 3).toOption.get
+    val a     = DenseLedgerBackend.prepare(state)
+    val b     = DenseLedgerBackend.prepare(a.snapshot)
+
+    a.execute(Vector(Transfer(A, B, 10L, M, P)), 0L).isRight shouldBe true
+    b.execute(Vector(Transfer(A, B, 20L, M, P)), 0L).isRight shouldBe true
+    a.snapshot.balances shouldBe Map(A -> 90L, B -> 10L)
+    b.snapshot.balances shouldBe Map(A -> 80L, B -> 20L)
+    a.version shouldBe 1L
+    b.version shouldBe 1L
+    a.id should not equal b.id
+  }
+
+  it should "keep empty dense commits evidence-only and version-preserving" in {
+    val state = LedgerState.initial(topology, Map(A -> 100L, B -> 0L)).toOption.get
+    val dense = DenseLedgerBackend.prepare(state)
+    (0 until 100).foreach(_ => dense.execute(Vector.empty, dense.version).toOption.get)
+    dense.version shouldBe 0L
   }

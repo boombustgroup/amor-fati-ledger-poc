@@ -5,7 +5,8 @@ final case class LedgerState private (
     topology: LedgerTopology,
     balances: Map[AccountId, Long],
     version: Long,
-    preparedCapacity: Int
+    preparedCapacity: Int,
+    id: LedgerStateId
 )
 
 enum ExecutionRejectionReason:
@@ -20,8 +21,14 @@ enum ExecutionRejectionReason:
 final case class ExecutionRejection(position: Option[Int], reason: ExecutionRejectionReason, snapshotVersion: Long)
 
 object LedgerState:
-  private[ledger] def make(topology: LedgerTopology, balances: Map[AccountId, Long], version: Long, preparedCapacity: Int): LedgerState =
-    new LedgerState(topology, balances, version, preparedCapacity)
+  private[ledger] def make(
+      topology: LedgerTopology,
+      balances: Map[AccountId, Long],
+      version: Long,
+      preparedCapacity: Int,
+      id: LedgerStateId = LedgerStateId.fresh()
+  ): LedgerState =
+    new LedgerState(topology, balances.filter(_._2 != 0L), version, preparedCapacity, id)
 
   def initial(
       topology: LedgerTopology,
@@ -33,7 +40,7 @@ object LedgerState:
     else if balances.keys.exists(account => !topology.accounts.contains(account)) then Left("Balances contain an unknown account")
     else if balances.exists { case (account, balance) => !topology.accounts(account).accepts(balance) } then
       Left("Balances contain a value outside account bounds")
-    else Right(make(topology, balances.filter(_._2 != 0L), 0L, capacity))
+    else Right(make(topology, balances, 0L, capacity))
 
 /** Atomic execution over a single logical snapshot. */
 object LedgerStateExecutor:
@@ -45,7 +52,7 @@ object LedgerStateExecutor:
         .map { case (nextBalances, _) =>
           val nextVersion = Math.addExact(state.version, 1L)
           val evidence    = ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, state.version, nextVersion)
-          (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
+          (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity, state.id), evidence)
         }
         .left
         .map(rejection => rejection.copy(position = Some(0)))
@@ -66,7 +73,7 @@ object LedgerStateExecutor:
           .map { case (nextBalances, _) =>
             val nextVersion = Math.addExact(state.version, 1L)
             val evidence    = ExecutionEvidence(transfers, total.toLong, total.toLong, state.version, nextVersion)
-            (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
+            (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity, state.id), evidence)
           }
           .left
           .map(identity)
@@ -95,7 +102,8 @@ object LedgerStateLifecycle:
             topology,
             nextBalances,
             Math.addExact(state.version, 1L),
-            state.preparedCapacity
+            state.preparedCapacity,
+            state.id
           )
         }
 
@@ -105,5 +113,5 @@ object LedgerStateLifecycle:
       .left
       .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, state.version))
       .map { topology =>
-        LedgerState.make(topology, state.balances - account, Math.addExact(state.version, 1L), state.preparedCapacity)
+        LedgerState.make(topology, state.balances - account, Math.addExact(state.version, 1L), state.preparedCapacity, state.id)
       }
