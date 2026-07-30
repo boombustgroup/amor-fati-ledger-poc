@@ -16,8 +16,10 @@ final case class AggregatedTransfer(
 /** Dense, index-resolved execution backend with staged atomic commits. */
 final class DenseLedgerBackend private (
     private var topology: LedgerTopology,
-    private var indexByAccount: Map[AccountId, Int],
-    private var accountByIndex: Vector[AccountId],
+    private val indexByAccount: scala.collection.mutable.LongMap[Int],
+    private val accountByIndex: Array[AccountId],
+    private val active: Array[Boolean],
+    private var size: Int,
     private var balances: Array[Long],
     private var currentVersion: Long,
     val preparedCapacity: Int
@@ -25,33 +27,38 @@ final class DenseLedgerBackend private (
   def version: Long = currentVersion
 
   def create(account: AccountId, metadata: AccountMetadata, initialBalance: Long): Either[ExecutionRejection, LedgerState] =
-    LedgerStateLifecycle
-      .create(snapshot, account, metadata, initialBalance)
-      .left
-      .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
-      .map { next =>
-        install(next)
-        snapshot
-      }
+    if indexByAccount.contains(AccountId.value(account).toLong) || size >= preparedCapacity || !metadata.accepts(initialBalance) then
+      Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+    else
+      AccountLifecycle
+        .create(topology, account, metadata)
+        .left
+        .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+        .map { nextTopology =>
+          topology = nextTopology
+          accountByIndex(size) = account
+          active(size) = true
+          indexByAccount.update(AccountId.value(account).toLong, size)
+          balances(size) = initialBalance
+          size += 1
+          currentVersion = Math.addExact(currentVersion, 1L)
+          snapshot
+        }
 
   def close(account: AccountId): Either[ExecutionRejection, LedgerState] =
-    LedgerStateLifecycle
-      .close(snapshot, account)
+    AccountLifecycle
+      .close(topology, snapshot.balances, account)
       .left
       .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
-      .map { next =>
-        install(next)
+      .map { nextTopology =>
+        val index = indexByAccount(AccountId.value(account).toLong)
+        topology = nextTopology
+        indexByAccount.remove(AccountId.value(account).toLong)
+        active(index) = false
+        balances(index) = 0L
+        currentVersion = Math.addExact(currentVersion, 1L)
         snapshot
       }
-
-  private def install(state: LedgerState): Unit =
-    topology = state.topology
-    accountByIndex = topology.accounts.keys.toVector.sortBy(AccountId.value)
-    indexByAccount = accountByIndex.zipWithIndex.toMap
-    val nextBalances = new Array[Long](preparedCapacity)
-    accountByIndex.indices.foreach(index => nextBalances(index) = state.balances.getOrElse(accountByIndex(index), 0L))
-    balances = nextBalances
-    currentVersion = state.version
 
   private def rejectionReason(transfer: Transfer, fromIndex: Int, toIndex: Int, preflight: Array[Long]): ExecutionRejectionReason =
     (topology.metadata(transfer.from), topology.metadata(transfer.to)) match
@@ -65,7 +72,7 @@ final class DenseLedgerBackend private (
         else ExecutionRejectionReason.Bounds
 
   def snapshot: LedgerState =
-    val visible = accountByIndex.iterator.zip(balances.iterator).filter(_._2 != 0L).toMap
+    val visible = (0 until size).iterator.filter(active).map(index => accountByIndex(index) -> balances(index)).filter(_._2 != 0L).toMap
     LedgerState.make(topology, visible, currentVersion, preparedCapacity)
 
   def execute(
@@ -85,8 +92,8 @@ final class DenseLedgerBackend private (
       var failure: Option[ExecutionRejection] = None
       transfers.iterator.zipWithIndex.takeWhile(_ => failure.isEmpty).foreach { case (transfer, position) =>
         (for
-          fromIndex <- indexByAccount.get(transfer.from).toRight(s"Unknown source at position $position")
-          toIndex   <- indexByAccount.get(transfer.to).toRight(s"Unknown target at position $position")
+          fromIndex <- indexByAccount.get(AccountId.value(transfer.from).toLong).toRight(s"Unknown source at position $position")
+          toIndex   <- indexByAccount.get(AccountId.value(transfer.to).toLong).toRight(s"Unknown target at position $position")
           _         <- TransferValidator.validate(topology, transfer)
           from      <- topology.metadata(transfer.from)
           to        <- topology.metadata(transfer.to)
@@ -97,9 +104,15 @@ final class DenseLedgerBackend private (
           _ <- Either.cond(to.accepts(nextTo.toLong), (), s"Target bounds at position $position")
         yield (fromIndex, toIndex, nextFrom.toLong, nextTo.toLong)) match
           case Left(_) =>
-            val fromIndex = indexByAccount.getOrElse(transfer.from, 0)
-            val toIndex   = indexByAccount.getOrElse(transfer.to, 0)
-            failure = Some(ExecutionRejection(Some(position), rejectionReason(transfer, fromIndex, toIndex, preflight), currentVersion))
+            val reason =
+              if !indexByAccount
+                  .contains(AccountId.value(transfer.from).toLong) || !indexByAccount.contains(AccountId.value(transfer.to).toLong)
+              then ExecutionRejectionReason.LifecycleViolation
+              else
+                val fromIndex = indexByAccount(AccountId.value(transfer.from).toLong)
+                val toIndex   = indexByAccount(AccountId.value(transfer.to).toLong)
+                rejectionReason(transfer, fromIndex, toIndex, preflight)
+            failure = Some(ExecutionRejection(Some(position), reason, currentVersion))
           case Right((fromIndex, toIndex, nextFrom, nextTo)) =>
             preflight(fromIndex) = nextFrom
             preflight(toIndex) = nextTo
@@ -108,13 +121,9 @@ final class DenseLedgerBackend private (
       failure match
         case Some(error) => Left(error)
         case None =>
-          val staged  = balances.clone()
+          val staged  = preflight
           val applied = scala.collection.mutable.ArrayBuffer.empty[Transfer]
-          prepared.foreach { case (fromIndex, toIndex, amount, transfer) =>
-            staged(fromIndex) = Math.subtractExact(staged(fromIndex), amount)
-            staged(toIndex) = Math.addExact(staged(toIndex), amount)
-            applied += transfer
-          }
+          prepared.foreach { case (_, _, _, transfer) => applied += transfer }
           val nextVersion = Math.addExact(currentVersion, 1L)
           val evidenceEither: Either[ExecutionRejection, ExecutionEvidence] = mode match
             case ExecutionEvidenceMode.TransferLog =>
@@ -152,7 +161,11 @@ final class DenseLedgerBackend private (
 object DenseLedgerBackend:
   def prepare(state: LedgerState): DenseLedgerBackend =
     val accounts = state.topology.accounts.keys.toVector.sortBy(AccountId.value)
-    val indexes  = accounts.zipWithIndex.toMap
-    val values   = new Array[Long](state.preparedCapacity)
+    val indexes  = scala.collection.mutable.LongMap.empty[Int]
+    accounts.zipWithIndex.foreach { case (account, index) => indexes.update(AccountId.value(account).toLong, index) }
+    val values       = new Array[Long](state.preparedCapacity)
+    val accountArray = new Array[AccountId](state.preparedCapacity)
+    val active       = new Array[Boolean](state.preparedCapacity)
+    accounts.zipWithIndex.foreach { case (account, index) => accountArray(index) = account; active(index) = true }
     accounts.indices.foreach(index => values(index) = state.balances.getOrElse(accounts(index), 0L))
-    new DenseLedgerBackend(state.topology, indexes, accounts, values, state.version, state.preparedCapacity)
+    new DenseLedgerBackend(state.topology, indexes, accountArray, active, accounts.size, values, state.version, state.preparedCapacity)

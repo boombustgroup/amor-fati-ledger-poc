@@ -37,25 +37,18 @@ object LedgerState:
 
 /** Atomic execution over a single logical snapshot. */
 object LedgerStateExecutor:
-  private def reason(error: String): ExecutionRejectionReason =
-    if error.contains("currency") then ExecutionRejectionReason.CurrencyMismatch
-    else if error.contains("permission") || error.contains("debit") || error.contains("credit") then
-      ExecutionRejectionReason.PermissionDenied
-    else if error.contains("overflow") || error.contains("underflow") || error.contains("Long") then ExecutionRejectionReason.Overflow
-    else ExecutionRejectionReason.Bounds
-
   def execute(state: LedgerState, transfer: Transfer, expectedVersion: Long): Either[ExecutionRejection, (LedgerState, ExecutionEvidence)] =
     if state.version != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, state.version))
     else
       TransferExecutor
-        .execute(state.topology, state.balances, transfer, state.version)
+        .executeTyped(state.topology, state.balances, transfer, state.version)
         .map { case (nextBalances, _) =>
           val nextVersion = Math.addExact(state.version, 1L)
           val evidence    = ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, state.version, nextVersion)
           (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
         }
         .left
-        .map(error => ExecutionRejection(Some(0), reason(error), state.version))
+        .map(rejection => rejection.copy(position = Some(0)))
 
   def executeSequence(
       state: LedgerState,
@@ -64,19 +57,19 @@ object LedgerStateExecutor:
   ): Either[ExecutionRejection, (LedgerState, ExecutionEvidence)] =
     if state.version != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, state.version))
     else if transfers.isEmpty then Right((state, ExecutionEvidence(Vector.empty, 0L, 0L, state.version, state.version)))
-    else if !transfers.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount).isValidLong then
-      Left(ExecutionRejection(None, ExecutionRejectionReason.Overflow, state.version))
     else
-      TransferExecutor
-        .executeSequence(state.topology, state.balances, transfers, state.version)
-        .map { case (nextBalances, _) =>
-          val nextVersion = Math.addExact(state.version, 1L)
-          val total       = transfers.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
-          val evidence    = ExecutionEvidence(transfers, total.toLong, total.toLong, state.version, nextVersion)
-          (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
-        }
-        .left
-        .map(error => ExecutionRejection(None, reason(error), state.version))
+      val total = transfers.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
+      if !total.isValidLong then Left(ExecutionRejection(None, ExecutionRejectionReason.Overflow, state.version))
+      else
+        TransferExecutor
+          .executeSequenceTyped(state.topology, state.balances, transfers, state.version)
+          .map { case (nextBalances, _) =>
+            val nextVersion = Math.addExact(state.version, 1L)
+            val evidence    = ExecutionEvidence(transfers, total.toLong, total.toLong, state.version, nextVersion)
+            (LedgerState.make(state.topology, nextBalances, nextVersion, state.preparedCapacity), evidence)
+          }
+          .left
+          .map(identity)
 
 object LedgerStateLifecycle:
   def create(

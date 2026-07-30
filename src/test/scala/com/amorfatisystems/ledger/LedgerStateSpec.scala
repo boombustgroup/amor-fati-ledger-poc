@@ -118,3 +118,37 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     dense.execute(Vector(Transfer(A, B, 1L, M, P)), expectedVersion = 9L).left.toOption.get.reason shouldBe
       ExecutionRejectionReason.VersionMismatch
   }
+
+  it should "preserve zero-balance normalization across reference and dense execution" in {
+    val state    = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
+    val dense    = DenseLedgerBackend.prepare(state)
+    val transfer = Transfer(A, B, 50L, M, P)
+
+    val expected = LedgerStateExecutor.execute(state, transfer, 0L).toOption.get
+    val actual   = dense.execute(Vector(transfer), 0L).toOption.get
+    actual._1.balances shouldBe expected._1.balances
+    actual._1.balances shouldBe Map(B -> 50L)
+  }
+
+  it should "report typed rejection reasons for bounds, permissions, and unknown accounts" in {
+    val boundedTopology = LedgerTopology
+      .validate(
+        Map(A -> AccountMetadata(X, minBalance = Some(0L), maxBalance = Some(100L)), B -> AccountMetadata(X, maxBalance = Some(100L)))
+      )
+      .toOption
+      .get
+    val state  = LedgerState.initial(boundedTopology, Map(A -> 50L, B -> 0L)).toOption.get
+    val bounds = LedgerStateExecutor.execute(state, Transfer(A, B, 60L, M, P), 0L).left.toOption.get
+    bounds.reason shouldBe ExecutionRejectionReason.Bounds
+
+    val deniedTopology = LedgerTopology
+      .validate(Map(A -> AccountMetadata(X, canDebit = false), B -> AccountMetadata(X)))
+      .toOption
+      .get
+    val deniedState = LedgerState.initial(deniedTopology, Map(A -> 50L, B -> 0L)).toOption.get
+    LedgerStateExecutor.execute(deniedState, Transfer(A, B, 1L, M, P), 0L).left.toOption.get.reason shouldBe
+      ExecutionRejectionReason.PermissionDenied
+
+    val unknown = LedgerStateExecutor.execute(state, Transfer(AccountId(99), B, 1L, M, P), 0L).left.toOption.get
+    unknown.reason shouldBe ExecutionRejectionReason.LifecycleViolation
+  }

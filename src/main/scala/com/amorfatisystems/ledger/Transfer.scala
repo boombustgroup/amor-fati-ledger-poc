@@ -61,10 +61,6 @@ object ExecutionEvidence:
   def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, inputVersion: Long, outputVersion: Long): ExecutionEvidence =
     TransferLogEvidence.create(applied, debitTotal, creditTotal, inputVersion, outputVersion)
 
-  /** Legacy reference-helper constructor where validation and commit share one stamp. */
-  def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, snapshotVersion: Long): ExecutionEvidence =
-    apply(applied, debitTotal, creditTotal, snapshotVersion, snapshotVersion)
-
 object TransferValidator:
   /** Validate topology-level prerequisites without changing balances. */
   def validate(topology: LedgerTopology, transfer: Transfer): Either[String, Unit] =
@@ -77,6 +73,85 @@ object TransferValidator:
     yield ()
 
 object TransferExecutor:
+  private def typedError(
+      topology: LedgerTopology,
+      balances: Map[AccountId, Long],
+      transfer: Transfer,
+      position: Option[Int],
+      version: Long
+  ): Either[ExecutionRejection, (AccountId, AccountId, Long, Long)] =
+    for
+      fromMetadata <- topology
+        .metadata(transfer.from)
+        .left
+        .map(_ => ExecutionRejection(position, ExecutionRejectionReason.LifecycleViolation, version))
+      toMetadata <- topology
+        .metadata(transfer.to)
+        .left
+        .map(_ => ExecutionRejection(position, ExecutionRejectionReason.LifecycleViolation, version))
+      _ <- Either.cond(
+        fromMetadata.currency == toMetadata.currency,
+        (),
+        ExecutionRejection(position, ExecutionRejectionReason.CurrencyMismatch, version)
+      )
+      _ <- Either.cond(
+        fromMetadata.canDebit && toMetadata.canCredit,
+        (),
+        ExecutionRejection(position, ExecutionRejectionReason.PermissionDenied, version)
+      )
+      fromBalance = balances.getOrElse(transfer.from, 0L)
+      toBalance   = balances.getOrElse(transfer.to, 0L)
+      nextFrom    = BigInt(fromBalance) - BigInt(transfer.amount)
+      nextTo      = BigInt(toBalance) + BigInt(transfer.amount)
+      _ <- Either.cond(
+        nextFrom.isValidLong && nextTo.isValidLong,
+        (),
+        ExecutionRejection(position, ExecutionRejectionReason.Overflow, version)
+      )
+      _ <- Either.cond(
+        fromMetadata.accepts(nextFrom.toLong) && toMetadata.accepts(nextTo.toLong),
+        (),
+        ExecutionRejection(position, ExecutionRejectionReason.Bounds, version)
+      )
+    yield (transfer.from, transfer.to, nextFrom.toLong, nextTo.toLong)
+
+  def executeTyped(
+      topology: LedgerTopology,
+      balances: Map[AccountId, Long],
+      transfer: Transfer,
+      inputVersion: Long
+  ): Either[ExecutionRejection, (Map[AccountId, Long], ExecutionEvidence)] =
+    typedError(topology, balances, transfer, Some(0), inputVersion).map { case (from, to, nextFrom, nextTo) =>
+      val nextVersion = Math.addExact(inputVersion, 1L)
+      val next        = balances.updated(from, nextFrom).updated(to, nextTo).filter(_._2 != 0L)
+      (next, ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, inputVersion, nextVersion))
+    }
+
+  def executeSequenceTyped(
+      topology: LedgerTopology,
+      balances: Map[AccountId, Long],
+      transfers: Vector[Transfer],
+      inputVersion: Long
+  ): Either[ExecutionRejection, (Map[AccountId, Long], ExecutionEvidence)] =
+    if transfers.isEmpty then Right((balances, ExecutionEvidence(Vector.empty, 0L, 0L, inputVersion, inputVersion)))
+    else
+      transfers.zipWithIndex
+        .foldLeft[Either[ExecutionRejection, (Map[AccountId, Long], Vector[Transfer])]](Right((balances, Vector.empty))) {
+          case (state, (transfer, position)) =>
+            state.flatMap { case (current, applied) =>
+              typedError(topology, current, transfer, Some(position), inputVersion).map { case (from, to, nextFrom, nextTo) =>
+                (current.updated(from, nextFrom).updated(to, nextTo), applied :+ transfer)
+              }
+            }
+        }
+        .flatMap { case (next, applied) =>
+          val total = applied.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
+          if !total.isValidLong then Left(ExecutionRejection(None, ExecutionRejectionReason.Overflow, inputVersion))
+          else
+            val outputVersion = Math.addExact(inputVersion, 1L)
+            Right((next.filter(_._2 != 0L), ExecutionEvidence(applied, total.toLong, total.toLong, inputVersion, outputVersion)))
+        }
+
   /** Apply one transfer immutably, returning the new balances and checked evidence. */
   def execute(
       topology: LedgerTopology,
@@ -94,7 +169,10 @@ object TransferExecutor:
       _ <- Either.cond(topology.accounts(transfer.from).accepts(nextFrom.toLong), (), "Source balance bounds reject debit")
       _ <- Either.cond(topology.accounts(transfer.to).accepts(nextTo.toLong), (), "Target balance bounds reject credit")
       next = balances.updated(transfer.from, nextFrom.toLong).updated(transfer.to, nextTo.toLong)
-    yield (next, ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, snapshotVersion))
+    yield (
+      next.filter(_._2 != 0L),
+      ExecutionEvidence(Vector(transfer), transfer.amount, transfer.amount, snapshotVersion, Math.addExact(snapshotVersion, 1L))
+    )
 
   /** Apply transfers in order; any failure returns no partial state or evidence. */
   def executeSequence(
@@ -112,6 +190,6 @@ object TransferExecutor:
       .flatMap { case (state, applied) =>
         try
           val total = applied.foldLeft(0L)((sum, transfer) => Math.addExact(sum, transfer.amount))
-          Right((state, ExecutionEvidence(applied, total, total, snapshotVersion)))
+          Right((state.filter(_._2 != 0L), ExecutionEvidence(applied, total, total, snapshotVersion, Math.addExact(snapshotVersion, 1L))))
         catch case _: ArithmeticException => Left("Transfer sequence evidence exceeds Long bounds")
       }
