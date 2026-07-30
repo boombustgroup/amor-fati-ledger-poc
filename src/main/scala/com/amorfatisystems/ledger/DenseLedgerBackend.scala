@@ -32,12 +32,12 @@ final class DenseLedgerBackend private (
       transfers: Vector[Transfer],
       expectedVersion: Long,
       mode: ExecutionEvidenceMode = ExecutionEvidenceMode.TransferLog
-  ): Either[String, (LedgerState, Either[Vector[Transfer], Vector[AggregatedTransfer]])] =
-    if currentVersion != expectedVersion then Left(s"VersionMismatch: expected=$expectedVersion actual=$currentVersion")
+  ): Either[ExecutionRejection, (LedgerState, Either[Vector[Transfer], Vector[AggregatedTransfer]])] =
+    if currentVersion != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, currentVersion))
     else
-      val staged                  = balances.clone()
-      val applied                 = scala.collection.mutable.ArrayBuffer.empty[Transfer]
-      var failure: Option[String] = None
+      val staged                              = balances.clone()
+      val applied                             = scala.collection.mutable.ArrayBuffer.empty[Transfer]
+      var failure: Option[ExecutionRejection] = None
       transfers.iterator.zipWithIndex.takeWhile(_ => failure.isEmpty).foreach { case (transfer, position) =>
         (for
           fromIndex <- indexByAccount.get(transfer.from).toRight(s"Unknown source at position $position")
@@ -51,7 +51,7 @@ final class DenseLedgerBackend private (
           _ <- Either.cond(from.accepts(nextFrom.toLong), (), s"Source bounds at position $position")
           _ <- Either.cond(to.accepts(nextTo.toLong), (), s"Target bounds at position $position")
         yield (fromIndex, toIndex, nextFrom.toLong, nextTo.toLong)) match
-          case Left(error) => failure = Some(error)
+          case Left(_) => failure = Some(ExecutionRejection(Some(position), ExecutionRejectionReason.Bounds, currentVersion))
           case Right((fromIndex, toIndex, nextFrom, nextTo)) =>
             staged(fromIndex) = nextFrom
             staged(toIndex) = nextTo
