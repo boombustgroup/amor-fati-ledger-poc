@@ -95,6 +95,13 @@ the plan or perform additional semantic validation. Evidence aggregation may
 still read instrument metadata while constructing its output. A rejected
 preflight never publishes staged storage.
 
+The direct result of a successful Dense commit is `ExecutionEvidence`; the full
+`LedgerState` is an on-demand materialized view obtained through `snapshot`.
+This preserves the semantic state boundary while avoiding O(size) map
+allocation on every hot-path batch. `TransferLog` evidence is replayable;
+`AggregatedByMechanism` is intentionally lossy and must not be used for
+transfer-level replay.
+
 Any partitioning by instrument, currency, mechanism, or other metadata is an
 internal DOD layout choice and cannot appear in the semantic API or client
 types. This preserves ADR-0001's instrument-as-metadata constraint.

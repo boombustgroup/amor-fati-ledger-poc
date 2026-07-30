@@ -79,8 +79,8 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
       mode = ExecutionEvidenceMode.AggregatedByMechanism
     )
 
-    result.map(_._1.balances) shouldBe Right(Map(A -> 35L, B -> 15L))
-    result.map { case (_, evidence) => evidence.asInstanceOf[AggregatedEvidence].groups.head.amount } shouldBe Right(15L)
+    backend.snapshot.balances shouldBe Map(A -> 35L, B -> 15L)
+    result.map(_.asInstanceOf[AggregatedEvidence].groups.head.amount) shouldBe Right(15L)
     backend.version shouldBe 1L
   }
 
@@ -102,11 +102,11 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
       val transfer = Transfer(A, B, amount, M, P)
       val expected = LedgerStateExecutor.execute(reference, transfer, reference.version).toOption.get
       val actual   = dense.execute(Vector(transfer), dense.version).toOption.get
-      actual._1.balances shouldBe expected._1.balances
-      actual._1.version shouldBe expected._1.version
-      actual._2.inputVersion shouldBe expected._2.inputVersion
-      actual._2.outputVersion shouldBe expected._2.outputVersion
-      actual._2.debitTotal shouldBe expected._2.debitTotal
+      dense.snapshot.balances shouldBe expected._1.balances
+      dense.snapshot.version shouldBe expected._1.version
+      actual.inputVersion shouldBe expected._2.inputVersion
+      actual.outputVersion shouldBe expected._2.outputVersion
+      actual.debitTotal shouldBe expected._2.debitTotal
       reference = expected._1
     }
   }
@@ -126,8 +126,8 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
 
     val expected = LedgerStateExecutor.execute(state, transfer, 0L).toOption.get
     val actual   = dense.execute(Vector(transfer), 0L).toOption.get
-    actual._1.balances shouldBe expected._1.balances
-    actual._1.balances shouldBe Map(B -> 50L)
+    dense.snapshot.balances shouldBe expected._1.balances
+    dense.snapshot.balances shouldBe Map(B -> 50L)
   }
 
   it should "report typed rejection reasons for bounds, permissions, and unknown accounts" in {

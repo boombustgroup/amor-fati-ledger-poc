@@ -32,7 +32,7 @@ final class DenseLedgerBackend private (
 
   def version: Long = currentVersion
 
-  def create(account: AccountId, metadata: AccountMetadata, initialBalance: Long): Either[ExecutionRejection, LedgerState] =
+  def create(account: AccountId, metadata: AccountMetadata, initialBalance: Long): Either[ExecutionRejection, Long] =
     if indexByAccount.contains(AccountId.value(account).toLong) || (freeIndexes.isEmpty && size >= preparedCapacity) || !metadata.accepts(
         initialBalance
       )
@@ -50,10 +50,10 @@ final class DenseLedgerBackend private (
           indexByAccount.update(AccountId.value(account).toLong, slot)
           balances(slot) = initialBalance
           currentVersion = Math.addExact(currentVersion, 1L)
-          snapshot
+          currentVersion
         }
 
-  def close(account: AccountId): Either[ExecutionRejection, LedgerState] =
+  def close(account: AccountId): Either[ExecutionRejection, Long] =
     indexByAccount.get(AccountId.value(account).toLong) match
       case None => Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
       case Some(index) if balances(index) != 0L =>
@@ -65,7 +65,7 @@ final class DenseLedgerBackend private (
         balances(index) = 0L
         freeIndexes.addOne(index)
         currentVersion = Math.addExact(currentVersion, 1L)
-        Right(snapshot)
+        Right(currentVersion)
 
   private def rejectionReason(transfer: Transfer, fromIndex: Int, toIndex: Int, preflight: Array[Long]): ExecutionRejectionReason =
     (topology.metadata(transfer.from), topology.metadata(transfer.to)) match
@@ -86,13 +86,13 @@ final class DenseLedgerBackend private (
       transfers: Vector[Transfer],
       expectedVersion: Long,
       mode: ExecutionEvidenceMode = ExecutionEvidenceMode.TransferLog
-  ): Either[ExecutionRejection, (LedgerState, ExecutionEvidence)] =
+  ): Either[ExecutionRejection, ExecutionEvidence] =
     if currentVersion != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, currentVersion))
     else if transfers.isEmpty then
       val evidence: ExecutionEvidence = mode match
         case ExecutionEvidenceMode.TransferLog           => TransferLogEvidence.create(Vector.empty, 0L, 0L, currentVersion, currentVersion)
         case ExecutionEvidenceMode.AggregatedByMechanism => AggregatedEvidence.create(Vector.empty, 0L, 0L, currentVersion, currentVersion)
-      Right((snapshot, evidence))
+      Right(evidence)
     else
       val preflight                           = balances.clone()
       val prepared                            = scala.collection.mutable.ArrayBuffer.empty[Transfer]
@@ -162,7 +162,7 @@ final class DenseLedgerBackend private (
           evidenceEither.map { evidence =>
             balances = staged
             currentVersion = nextVersion
-            (snapshot, evidence)
+            evidence
           }
 
 object DenseLedgerBackend:
