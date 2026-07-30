@@ -43,6 +43,10 @@ behaviour. Copying a snapshot for replay or a research fork is explicit and is
 not part of the hot path. The reference `Map` backend continues to produce a
 new balance store.
 
+Every non-empty successful transfer execution commits exactly once and advances
+the version by one. An empty transfer sequence is a true no-op: it returns the
+same logical state and evidence with identical input and output versions.
+
 `LedgerTopology` supports checked account creation and closure operations.
 Prepared state declares a `preparedCapacity`; exceeding it is a checked
 lifecycle error rather than silent reallocation. Lifecycle commits increment
@@ -83,6 +87,13 @@ Currency, permission, and balance-bound checks are performed during preflight
 against the resolved batch metadata. The hot loop retains only checked numeric
 updates and the snapshot-version guard; it does not repeat metadata lookups for
 each transfer.
+
+Preflight simulates cumulative per-account deltas in plan order, applies the
+checked numeric updates to the private staged array, and validates the resulting
+balances before commit. Commit publishes that staged array; it does not replay
+the plan or perform additional semantic validation. Evidence aggregation may
+still read instrument metadata while constructing its output. A rejected
+preflight never publishes staged storage.
 
 Any partitioning by instrument, currency, mechanism, or other metadata is an
 internal DOD layout choice and cannot appear in the semantic API or client

@@ -42,6 +42,10 @@ Full verification boundaries, trust-chain details, and architecture notes live i
   Pure `Map`-based execution with `canApplyFlow`, `canApplyAll`, `applyCheckedFlow`, and `applyCheckedAll`.
 - [Transfer.scala](src/main/scala/com/amorfatisystems/ledger/Transfer.scala)  
   Generic account-to-account transfer contract with currency and permission validation.
+- [LedgerState.scala](src/main/scala/com/amorfatisystems/ledger/LedgerState.scala)
+  Immutable snapshot boundary, versioned lifecycle, atomic execution, and snapshot evidence.
+- [DenseLedgerBackend.scala](src/main/scala/com/amorfatisystems/ledger/DenseLedgerBackend.scala)
+  Index-resolved primitive-array execution path with staged commits and selectable evidence.
 - [GenericContractSpec.scala](src/test/scala/com/amorfatisystems/ledger/GenericContractSpec.scala)
   Contract coverage for topology, transfers, lifecycle, evidence, overflow, and reference alignment.
 - [Distribute.scala](src/main/scala/com/amorfatisystems/ledger/Distribute.scala)  

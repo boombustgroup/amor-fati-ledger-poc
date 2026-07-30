@@ -39,7 +39,7 @@ class GenericContractSpec extends AnyFlatSpec with Matchers:
     val transfer = Transfer(A, B, 25L, M, P)
     val result   = TransferExecutor.execute(topology(), Map(A -> 50L, B -> 0L), transfer, 7L)
     result.map(_._1) shouldBe Right(Map(A -> 25L, B -> 25L))
-    result.map(_._2.snapshotVersion) shouldBe Right(7L)
+    result.map(_._2.snapshotVersion) shouldBe Right(8L)
     result.map(_._2.debitTotal) shouldBe Right(25L)
   }
 
