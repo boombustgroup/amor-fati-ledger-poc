@@ -45,6 +45,7 @@ final case class AggregatedEvidence private (
   val applied: Vector[Transfer] = Vector.empty
   require(debitTotal >= 0L && creditTotal >= 0L)
   require(debitTotal == creditTotal)
+  require(groups.foldLeft(BigInt(0))((sum, group) => sum + group.amount) == BigInt(debitTotal))
 
 object AggregatedEvidence:
   def create(

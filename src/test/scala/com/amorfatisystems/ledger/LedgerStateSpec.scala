@@ -37,7 +37,7 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     state.balances shouldBe Map(A -> 50L)
   }
 
-  it should "advance once for a successful no-op sequence" in {
+  it should "treat an empty sequence as a version-preserving no-op" in {
     val state = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
 
     val result = LedgerStateExecutor.executeSequence(state, Vector.empty, expectedVersion = 0L)

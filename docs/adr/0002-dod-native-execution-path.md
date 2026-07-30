@@ -88,10 +88,12 @@ against the resolved batch metadata. The hot loop retains only checked numeric
 updates and the snapshot-version guard; it does not repeat metadata lookups for
 each transfer.
 
-Preflight simulates cumulative per-account deltas in plan order and validates
-the resulting balances before staged commit. The hot loop then replays prepared
-integer index/amount records without topology lookups. A rejected preflight
-never publishes staged storage.
+Preflight simulates cumulative per-account deltas in plan order, applies the
+checked numeric updates to the private staged array, and validates the resulting
+balances before commit. Commit publishes that staged array; it does not replay
+the plan or perform additional semantic validation. Evidence aggregation may
+still read instrument metadata while constructing its output. A rejected
+preflight never publishes staged storage.
 
 Any partitioning by instrument, currency, mechanism, or other metadata is an
 internal DOD layout choice and cannot appear in the semantic API or client

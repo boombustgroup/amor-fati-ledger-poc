@@ -24,11 +24,16 @@ final class DenseLedgerBackend private (
     private var currentVersion: Long,
     val preparedCapacity: Int
 ):
+  /** Mutable single-owner backend; version checks do not isolate concurrent callers. */
+  private val freeIndexes = scala.collection.mutable.ArrayDeque.empty[Int]
+
   def version: Long = currentVersion
 
   def create(account: AccountId, metadata: AccountMetadata, initialBalance: Long): Either[ExecutionRejection, LedgerState] =
-    if indexByAccount.contains(AccountId.value(account).toLong) || size >= preparedCapacity || !metadata.accepts(initialBalance) then
-      Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+    if indexByAccount.contains(AccountId.value(account).toLong) || (freeIndexes.isEmpty && size >= preparedCapacity) || !metadata.accepts(
+        initialBalance
+      )
+    then Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
     else
       AccountLifecycle
         .create(topology, account, metadata)
@@ -36,11 +41,11 @@ final class DenseLedgerBackend private (
         .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
         .map { nextTopology =>
           topology = nextTopology
-          accountByIndex(size) = account
-          active(size) = true
-          indexByAccount.update(AccountId.value(account).toLong, size)
-          balances(size) = initialBalance
-          size += 1
+          val slot = freeIndexes.removeHeadOption().getOrElse { val appended = size; size += 1; appended }
+          accountByIndex(slot) = account
+          active(slot) = true
+          indexByAccount.update(AccountId.value(account).toLong, slot)
+          balances(slot) = initialBalance
           currentVersion = Math.addExact(currentVersion, 1L)
           snapshot
         }
@@ -55,6 +60,7 @@ final class DenseLedgerBackend private (
         indexByAccount.remove(AccountId.value(account).toLong)
         active(index) = false
         balances(index) = 0L
+        freeIndexes.addOne(index)
         currentVersion = Math.addExact(currentVersion, 1L)
         Right(snapshot)
 
