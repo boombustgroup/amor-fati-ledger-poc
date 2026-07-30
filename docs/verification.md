@@ -31,6 +31,8 @@ Production implementations are not themselves formally verified. They are tested
 
 - **`Interpreter.scala`** — property-based tests, explicit `canApplyFlow` / `canApplyAll` overflow contracts, checked entrypoints, and a test bridge against an embedded `BigInt` reference shape for non-overflow inputs
 - **`TransferExecutor`** — contract tests for topology lookup, currency compatibility, permissions, bounds, sequence atomicity, lifecycle evidence, and overflow handling
+- **`LedgerStateExecutor`** — immutable snapshot semantics, stale-version rejection, atomic sequence commits, and input/output evidence versions
+- **`DenseLedgerBackend`** — index-resolved staged array execution with transfer-log and aggregated evidence modes, tested against snapshot semantics
 - **`Transfer.scala`** — typed account-to-account transfer contract with currency compatibility and debit/credit permission checks
 - **`MutableWorldState.scala`** — direct contract tests for sparse snapshots, per-asset totals, key separation, checked reads/writes, and backing-array reuse
 - **`DistributeModel.scala`** — canonical pure executable semantics for production floor-with-residual distribution, with `BigInt` internal accumulation to avoid hidden `Long` overflow in share-sum calculations

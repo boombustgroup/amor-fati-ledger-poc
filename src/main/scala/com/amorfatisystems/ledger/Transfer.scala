@@ -19,7 +19,8 @@ final case class ExecutionEvidence private (
     applied: Vector[Transfer],
     debitTotal: Long,
     creditTotal: Long,
-    snapshotVersion: Long
+    inputVersion: Long,
+    outputVersion: Long
 ):
   require(debitTotal >= 0L && creditTotal >= 0L)
   require(debitTotal == creditTotal)
@@ -27,8 +28,16 @@ final case class ExecutionEvidence private (
 
 object ExecutionEvidence:
   /** Construct evidence only when all supplied totals agree with `applied`. */
+  def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, inputVersion: Long, outputVersion: Long): ExecutionEvidence =
+    new ExecutionEvidence(applied, debitTotal, creditTotal, inputVersion, outputVersion)
+
+  /** Legacy reference-helper constructor where validation and commit share one stamp. */
   def apply(applied: Vector[Transfer], debitTotal: Long, creditTotal: Long, snapshotVersion: Long): ExecutionEvidence =
-    new ExecutionEvidence(applied, debitTotal, creditTotal, snapshotVersion)
+    apply(applied, debitTotal, creditTotal, snapshotVersion, snapshotVersion)
+
+extension (evidence: ExecutionEvidence)
+  /** Output stamp retained as a convenient name for reference-helper callers. */
+  def snapshotVersion: Long = evidence.outputVersion
 
 object TransferValidator:
   /** Validate topology-level prerequisites without changing balances. */
