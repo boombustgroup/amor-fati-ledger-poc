@@ -13,7 +13,11 @@ final case class AggregatedTransfer(
     amount: Long
 )
 
-/** Dense, index-resolved execution backend with staged atomic commits. */
+/** Dense, index-resolved execution backend with staged atomic commits.
+  *
+  * This backend is mutable and requires single-threaded ownership. Version checks do not isolate concurrent callers because validation and
+  * commit are unsynchronized.
+  */
 final class DenseLedgerBackend private (
     private var topology: LedgerTopology,
     private val indexByAccount: scala.collection.mutable.LongMap[Int],
@@ -24,7 +28,6 @@ final class DenseLedgerBackend private (
     private var currentVersion: Long,
     val preparedCapacity: Int
 ):
-  /** Mutable single-owner backend; version checks do not isolate concurrent callers. */
   private val freeIndexes = scala.collection.mutable.ArrayDeque.empty[Int]
 
   def version: Long = currentVersion
