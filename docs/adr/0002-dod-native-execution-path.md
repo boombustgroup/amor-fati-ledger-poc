@@ -30,10 +30,12 @@ We will implement a single logical `LedgerState` snapshot containing:
 - balance storage owned by the state;
 - a monotonic snapshot version.
 
-`LedgerState` is the semantic input and output of execution. A successful
-execution returns a new logical state and evidence tied to the exact input and
-output snapshot versions. A failed execution publishes neither partial state
-nor partial evidence.
+`LedgerState` is the semantic input of execution and the on-demand materialized
+view of committed state. The direct output of a Dense commit is
+`ExecutionEvidence`, tied to the exact input and output snapshot versions. The
+reference interpreter additionally returns a new `LedgerState` because its
+immutable map representation makes that view cheap. A failed execution
+publishes neither partial state nor partial evidence.
 
 The semantic snapshot is immutable at the boundary. The DOD backend may mutate
 its owned primitive buffers in place, but only behind a versioned commit
@@ -94,6 +96,19 @@ balances before commit. Commit publishes that staged array; it does not replay
 the plan or perform additional semantic validation. Evidence aggregation may
 still read instrument metadata while constructing its output. A rejected
 preflight never publishes staged storage.
+
+The direct result of a successful Dense commit is `ExecutionEvidence`; the full
+`LedgerState` is an on-demand materialized view obtained through `snapshot`.
+This preserves the semantic state boundary while avoiding O(size) map
+allocation on every hot-path batch. `TransferLog` evidence is replayable;
+`AggregatedByMechanism` is intentionally lossy and must not be used for
+transfer-level replay.
+
+Dense lifecycle operations follow the same boundary and return the committed
+version; callers materialize the resulting `LedgerState` through `snapshot`.
+Each prepared backend has a `LedgerStateId`; versions are comparable only
+within that state lineage. Lifecycle expected-version guards and fork lineage
+checks are part of this contract.
 
 Any partitioning by instrument, currency, mechanism, or other metadata is an
 internal DOD layout choice and cannot appear in the semantic API or client

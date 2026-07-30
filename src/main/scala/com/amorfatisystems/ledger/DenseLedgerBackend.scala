@@ -26,16 +26,24 @@ final class DenseLedgerBackend private (
     private var size: Int,
     private var balances: Array[Long],
     private var currentVersion: Long,
-    val preparedCapacity: Int
+    val preparedCapacity: Int,
+    val id: LedgerStateId
 ):
   private val freeIndexes = scala.collection.mutable.ArrayDeque.empty[Int]
 
   def version: Long = currentVersion
 
-  def create(account: AccountId, metadata: AccountMetadata, initialBalance: Long): Either[ExecutionRejection, LedgerState] =
-    if indexByAccount.contains(AccountId.value(account).toLong) || (freeIndexes.isEmpty && size >= preparedCapacity) || !metadata.accepts(
-        initialBalance
-      )
+  def create(
+      account: AccountId,
+      metadata: AccountMetadata,
+      initialBalance: Long,
+      expectedVersion: Long = currentVersion
+  ): Either[ExecutionRejection, Long] =
+    if expectedVersion != currentVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, currentVersion))
+    else if indexByAccount.contains(AccountId.value(account).toLong) || (freeIndexes.isEmpty && size >= preparedCapacity) || !metadata
+        .accepts(
+          initialBalance
+        )
     then Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
     else
       AccountLifecycle
@@ -50,22 +58,24 @@ final class DenseLedgerBackend private (
           indexByAccount.update(AccountId.value(account).toLong, slot)
           balances(slot) = initialBalance
           currentVersion = Math.addExact(currentVersion, 1L)
-          snapshot
+          currentVersion
         }
 
-  def close(account: AccountId): Either[ExecutionRejection, LedgerState] =
-    indexByAccount.get(AccountId.value(account).toLong) match
-      case None => Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
-      case Some(index) if balances(index) != 0L =>
-        Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
-      case Some(index) =>
-        topology = LedgerTopology(topology.accounts - account)
-        indexByAccount.remove(AccountId.value(account).toLong)
-        active(index) = false
-        balances(index) = 0L
-        freeIndexes.addOne(index)
-        currentVersion = Math.addExact(currentVersion, 1L)
-        Right(snapshot)
+  def close(account: AccountId, expectedVersion: Long = currentVersion): Either[ExecutionRejection, Long] =
+    if expectedVersion != currentVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, currentVersion))
+    else
+      indexByAccount.get(AccountId.value(account).toLong) match
+        case None => Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+        case Some(index) if balances(index) != 0L =>
+          Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+        case Some(index) =>
+          topology = LedgerTopology(topology.accounts - account)
+          indexByAccount.remove(AccountId.value(account).toLong)
+          active(index) = false
+          balances(index) = 0L
+          freeIndexes.addOne(index)
+          currentVersion = Math.addExact(currentVersion, 1L)
+          Right(currentVersion)
 
   private def rejectionReason(transfer: Transfer, fromIndex: Int, toIndex: Int, preflight: Array[Long]): ExecutionRejectionReason =
     (topology.metadata(transfer.from), topology.metadata(transfer.to)) match
@@ -80,19 +90,19 @@ final class DenseLedgerBackend private (
 
   def snapshot: LedgerState =
     val visible = (0 until size).iterator.filter(active).map(index => accountByIndex(index) -> balances(index)).filter(_._2 != 0L).toMap
-    LedgerState.make(topology, visible, currentVersion, preparedCapacity)
+    LedgerState.make(topology, visible, currentVersion, preparedCapacity, id)
 
   def execute(
       transfers: Vector[Transfer],
       expectedVersion: Long,
       mode: ExecutionEvidenceMode = ExecutionEvidenceMode.TransferLog
-  ): Either[ExecutionRejection, (LedgerState, ExecutionEvidence)] =
+  ): Either[ExecutionRejection, ExecutionEvidence] =
     if currentVersion != expectedVersion then Left(ExecutionRejection(None, ExecutionRejectionReason.VersionMismatch, currentVersion))
     else if transfers.isEmpty then
       val evidence: ExecutionEvidence = mode match
         case ExecutionEvidenceMode.TransferLog           => TransferLogEvidence.create(Vector.empty, 0L, 0L, currentVersion, currentVersion)
         case ExecutionEvidenceMode.AggregatedByMechanism => AggregatedEvidence.create(Vector.empty, 0L, 0L, currentVersion, currentVersion)
-      Right((snapshot, evidence))
+      Right(evidence)
     else
       val preflight                           = balances.clone()
       val prepared                            = scala.collection.mutable.ArrayBuffer.empty[Transfer]
@@ -128,19 +138,17 @@ final class DenseLedgerBackend private (
       failure match
         case Some(error) => Left(error)
         case None =>
-          val staged  = preflight
-          val applied = scala.collection.mutable.ArrayBuffer.empty[Transfer]
-          prepared.foreach(applied += _)
+          val staged      = preflight
           val nextVersion = Math.addExact(currentVersion, 1L)
           val evidenceEither: Either[ExecutionRejection, ExecutionEvidence] = mode match
             case ExecutionEvidenceMode.TransferLog =>
-              val total = applied.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
+              val total = prepared.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
               if total.isValidLong then
-                Right(TransferLogEvidence.create(applied.toVector, total.toLong, total.toLong, currentVersion, nextVersion))
+                Right(TransferLogEvidence.create(prepared.toVector, total.toLong, total.toLong, currentVersion, nextVersion))
               else Left(ExecutionRejection(None, ExecutionRejectionReason.Overflow, currentVersion))
             case ExecutionEvidenceMode.AggregatedByMechanism =>
               val grouped = scala.collection.mutable.Map.empty[(CurrencyId, AccountId, AccountId, MechanismId), BigInt]
-              applied.foreach { transfer =>
+              prepared.foreach { transfer =>
                 val key = (topology.accounts(transfer.from).currency, transfer.from, transfer.to, transfer.mechanism)
                 grouped.update(key, grouped.getOrElse(key, BigInt(0)) + BigInt(transfer.amount))
               }
@@ -162,7 +170,7 @@ final class DenseLedgerBackend private (
           evidenceEither.map { evidence =>
             balances = staged
             currentVersion = nextVersion
-            (snapshot, evidence)
+            evidence
           }
 
 object DenseLedgerBackend:
@@ -175,4 +183,14 @@ object DenseLedgerBackend:
     val active       = new Array[Boolean](state.preparedCapacity)
     accounts.zipWithIndex.foreach { case (account, index) => accountArray(index) = account; active(index) = true }
     accounts.indices.foreach(index => values(index) = state.balances.getOrElse(accounts(index), 0L))
-    new DenseLedgerBackend(state.topology, indexes, accountArray, active, accounts.size, values, state.version, state.preparedCapacity)
+    new DenseLedgerBackend(
+      state.topology,
+      indexes,
+      accountArray,
+      active,
+      accounts.size,
+      values,
+      state.version,
+      state.preparedCapacity,
+      LedgerStateId.fresh()
+    )
