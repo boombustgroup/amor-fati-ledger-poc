@@ -153,6 +153,7 @@ object TransferExecutor:
         }
 
   /** Apply one transfer immutably, returning the new balances and checked evidence. */
+  @deprecated("Use executeTyped for typed rejection reasons", "0.2.0")
   def execute(
       topology: LedgerTopology,
       balances: Map[AccountId, Long],
@@ -175,6 +176,7 @@ object TransferExecutor:
     )
 
   /** Apply transfers in order; any failure returns no partial state or evidence. */
+  @deprecated("Use executeSequenceTyped for typed rejection reasons", "0.2.0")
   def executeSequence(
       topology: LedgerTopology,
       balances: Map[AccountId, Long],

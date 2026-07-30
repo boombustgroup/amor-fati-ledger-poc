@@ -90,9 +90,10 @@ object LedgerStateLifecycle:
         .left
         .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, state.version))
         .map { topology =>
+          val nextBalances = if initialBalance == 0L then state.balances else state.balances.updated(account, initialBalance)
           LedgerState.make(
             topology,
-            state.balances.updated(account, initialBalance),
+            nextBalances,
             Math.addExact(state.version, 1L),
             state.preparedCapacity
           )

@@ -46,19 +46,17 @@ final class DenseLedgerBackend private (
         }
 
   def close(account: AccountId): Either[ExecutionRejection, LedgerState] =
-    AccountLifecycle
-      .close(topology, snapshot.balances, account)
-      .left
-      .map(_ => ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
-      .map { nextTopology =>
-        val index = indexByAccount(AccountId.value(account).toLong)
-        topology = nextTopology
+    indexByAccount.get(AccountId.value(account).toLong) match
+      case None => Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+      case Some(index) if balances(index) != 0L =>
+        Left(ExecutionRejection(None, ExecutionRejectionReason.LifecycleViolation, currentVersion))
+      case Some(index) =>
+        topology = LedgerTopology(topology.accounts - account)
         indexByAccount.remove(AccountId.value(account).toLong)
         active(index) = false
         balances(index) = 0L
         currentVersion = Math.addExact(currentVersion, 1L)
-        snapshot
-      }
+        Right(snapshot)
 
   private def rejectionReason(transfer: Transfer, fromIndex: Int, toIndex: Int, preflight: Array[Long]): ExecutionRejectionReason =
     (topology.metadata(transfer.from), topology.metadata(transfer.to)) match
@@ -88,7 +86,7 @@ final class DenseLedgerBackend private (
       Right((snapshot, evidence))
     else
       val preflight                           = balances.clone()
-      val prepared                            = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Long, Transfer)]
+      val prepared                            = scala.collection.mutable.ArrayBuffer.empty[Transfer]
       var failure: Option[ExecutionRejection] = None
       transfers.iterator.zipWithIndex.takeWhile(_ => failure.isEmpty).foreach { case (transfer, position) =>
         (for
@@ -116,14 +114,14 @@ final class DenseLedgerBackend private (
           case Right((fromIndex, toIndex, nextFrom, nextTo)) =>
             preflight(fromIndex) = nextFrom
             preflight(toIndex) = nextTo
-            prepared += ((fromIndex, toIndex, transfer.amount, transfer))
+            prepared += transfer
       }
       failure match
         case Some(error) => Left(error)
         case None =>
           val staged  = preflight
           val applied = scala.collection.mutable.ArrayBuffer.empty[Transfer]
-          prepared.foreach { case (_, _, _, transfer) => applied += transfer }
+          prepared.foreach(applied += _)
           val nextVersion = Math.addExact(currentVersion, 1L)
           val evidenceEither: Either[ExecutionRejection, ExecutionEvidence] = mode match
             case ExecutionEvidenceMode.TransferLog =>
