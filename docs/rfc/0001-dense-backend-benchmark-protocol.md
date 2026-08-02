@@ -21,13 +21,13 @@ experiment that this RFC prescribes.
 ## Motivation
 
 ADR-0002 mandates that the Dense backend be benchmarked at 100k, 1M, and 8M
-accounts, that it execute `Conformance.TwoSector` from
-`amor-fati-AB-SFC` RFC-0001 with bit-identical results to the reference
+accounts, that it execute the `MonetaryCore` transition suite from
+`amor-fati-AB-SFC` RFC-0005 with bit-identical results to the reference
 interpreter, and that a >10% regression against a signed baseline blocks
-release. None of this is currently actionable:
+release. The benchmark portion is not yet actionable:
 
-- there are no fixture workloads representing SFC-ABM production;
-- there is no `Conformance.TwoSector` implementation;
+- the transition suite is a semantic conformance suite, not a scalable
+  SFC-ABM production workload;
 - the noise floor of the measurement infrastructure is unknown, so 10% is
   arbitrary;
 - there is no environment lock, so a baseline does not transfer between
@@ -216,19 +216,21 @@ across the gate matrix.
 - **Emergency escape.** A regression that reproduces on baseline hardware
   under baseline JVM flags is not overridable by "it's just CI noise".
 
-### D7. `Conformance.TwoSector` dependency
+### D7. `MonetaryCore` transition-suite dependency
 
-ADR-0002 Constraint 6 requires that the Dense backend execute
-`Conformance.TwoSector` from `amor-fati-AB-SFC` RFC-0001 with
-bit-identical evidence to the reference interpreter. This fixture does not
-yet exist; when it does, it is the canonical realistic-workload gate. This
-RFC does not attempt to substitute for it — synthetic fixtures (D1) exist
-to stress specific code paths, not to replace SFC realism.
+ADR-0002 Constraint 6 requires that the Dense backend execute the T0–T8
+`MonetaryCore` transition suite from `amor-fati-AB-SFC` RFC-0005 with
+bit-identical evidence to the reference interpreter. The suite is executable
+today. It proves account lifecycle, issuance, repayment, routed payment, debt
+issuance and transfer, redemption, and fiscal disbursement semantics; it is
+not a realistic large-scale workload. This RFC does not attempt to substitute
+for either form of validation — synthetic fixtures (D1) stress specific code
+paths, while the transition suite preserves financial semantics.
 
 Consequence: this RFC's fixture library is a stress-test suite. Promotion
 of Dense requires both:
 1. passing the stress-test gate under this RFC, and
-2. passing `Conformance.TwoSector` bit-equivalence to Reference.
+2. passing `MonetaryCore` T0–T8 bit-equivalence to Reference.
 
 ## Threats to Validity
 
@@ -240,9 +242,10 @@ credible baseline.
 **Synthetic workloads underrepresent SFC dynamics.** Uniform-random topologies
 have no hubs, no wealth concentration, no bursty spending. Baselines under
 `SparseRandom / SmallMarket` predict worst-case cache behavior and are
-uninformative about typical AB-SFC runs. Mitigation: `Conformance.TwoSector`
-as the canonical realistic gate; synthetic fixtures relegated to
-stress-test role.
+uninformative about typical AB-SFC runs. Mitigation: retain `MonetaryCore`
+transition conformance for financial semantics, and add a separate
+economy-level workload only when an agent runtime exists; synthetic fixtures
+remain stress tests.
 
 **Ledger-only benchmark ignores AB-SFC overhead.** The layer above the
 kernel (`MechanismDispatcher`, `SectorAgent`, plan generation) may dominate
@@ -366,8 +369,8 @@ underlying rationale.
    pending RFC-0001 completion".
 2. AB-SFC consultation → D1 fixture archetypes finalized.
 3. Noise-floor experiment executed → D5 threshold table populated.
-4. `Conformance.TwoSector` fixture available in `amor-fati-AB-SFC` →
-   ADR-0002 Constraint 6 gate becomes exercisable.
+4. `MonetaryCore` T0–T8 Reference/Dense conformance remains green →
+   ADR-0002 Constraint 6 gate remains exercisable.
 5. First signed baseline under this protocol → Dense backend promoted from
    experimental to production-eligible.
 

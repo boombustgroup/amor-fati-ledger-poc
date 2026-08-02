@@ -189,9 +189,9 @@ be moved in a separate decision without changing ledger execution semantics.
    must be published in versioned `docs/benchmarks/acceptance.md` before the DOD
    backend is promoted; a regression greater than 10% against the signed
    baseline blocks release.
-6. The DOD backend must execute `Conformance.TwoSector` from the
-   `amor-fati-AB-SFC` RFC and produce bit-identical state progression and
-   evidence to the reference interpreter.
+6. The DOD backend must execute the `MonetaryCore` T0–T8 transition suite
+   from `amor-fati-AB-SFC` RFC-0005 and produce bit-identical state
+   progression and evidence to the reference interpreter.
 
 ## Rejected Alternatives
 
