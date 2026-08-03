@@ -218,7 +218,7 @@ across the gate matrix.
 
 ### D7. `MonetaryCore` transition-suite dependency
 
-ADR-0002 Constraint 6 requires that the Dense backend execute the T0–T8
+ADR-0002 Constraint 6 requires that the Dense backend execute the
 `MonetaryCore` transition suite from `amor-fati-AB-SFC` RFC-0005 with
 bit-identical evidence to the reference interpreter. The suite is executable
 today. It proves account lifecycle, issuance, repayment, routed payment, debt
@@ -230,7 +230,7 @@ paths, while the transition suite preserves financial semantics.
 Consequence: this RFC's fixture library is a stress-test suite. Promotion
 of Dense requires both:
 1. passing the stress-test gate under this RFC, and
-2. passing `MonetaryCore` T0–T8 bit-equivalence to Reference.
+2. passing `MonetaryCore` transition-suite bit-equivalence to Reference.
 
 ## Threats to Validity
 
@@ -369,7 +369,7 @@ underlying rationale.
    pending RFC-0001 completion".
 2. AB-SFC consultation → D1 fixture archetypes finalized.
 3. Noise-floor experiment executed → D5 threshold table populated.
-4. `MonetaryCore` T0–T8 Reference/Dense conformance remains green →
+4. `MonetaryCore` Reference/Dense transition conformance remains green →
    ADR-0002 Constraint 6 gate remains exercisable.
 5. First signed baseline under this protocol → Dense backend promoted from
    experimental to production-eligible.
