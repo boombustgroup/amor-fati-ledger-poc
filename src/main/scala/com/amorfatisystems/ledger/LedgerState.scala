@@ -17,6 +17,8 @@ enum ExecutionRejectionReason:
   case AtomicityViolation
   case VersionMismatch
   case LifecycleViolation
+  case IndexedBatchBackendMismatch
+  case InvalidTransfer
 
 final case class ExecutionRejection(position: Option[Int], reason: ExecutionRejectionReason, snapshotVersion: Long)
 
