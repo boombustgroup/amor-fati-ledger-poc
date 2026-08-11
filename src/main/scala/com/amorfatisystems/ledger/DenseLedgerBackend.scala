@@ -77,14 +77,20 @@ final class DenseLedgerBackend private (
           currentVersion = Math.addExact(currentVersion, 1L)
           Right(currentVersion)
 
-  private def rejectionReason(transfer: Transfer, fromIndex: Int, toIndex: Int, preflight: Array[Long]): ExecutionRejectionReason =
+  private def rejectionReason(
+      transfer: Transfer,
+      fromIndex: Int,
+      toIndex: Int,
+      fromBalance: Long,
+      toBalance: Long
+  ): ExecutionRejectionReason =
     (topology.metadata(transfer.from), topology.metadata(transfer.to)) match
       case (Right(from), Right(to)) if from.currency != to.currency => ExecutionRejectionReason.CurrencyMismatch
       case (Right(from), _) if !from.canDebit                       => ExecutionRejectionReason.PermissionDenied
       case (_, Right(to)) if !to.canCredit                          => ExecutionRejectionReason.PermissionDenied
       case _ =>
-        val nextFrom = BigInt(preflight(fromIndex)) - BigInt(transfer.amount)
-        val nextTo   = BigInt(preflight(toIndex)) + BigInt(transfer.amount)
+        val nextFrom = BigInt(fromBalance) - BigInt(transfer.amount)
+        val nextTo   = BigInt(toBalance) + BigInt(transfer.amount)
         if !nextFrom.isValidLong || !nextTo.isValidLong then ExecutionRejectionReason.Overflow
         else ExecutionRejectionReason.Bounds
 
@@ -104,7 +110,29 @@ final class DenseLedgerBackend private (
         case ExecutionEvidenceMode.AggregatedByMechanism => AggregatedEvidence.create(Vector.empty, 0L, 0L, currentVersion, currentVersion)
       Right(evidence)
     else
-      val preflight                           = balances.clone()
+      /** Stages only accounts touched by this execution. The former whole `balances.clone()` made the cost of a two-leg payment linear in
+        * every inactive, unrelated account in the prepared ledger.
+        */
+      val stagedIndexes  = new Array[Int](transfers.length * 2)
+      val stagedBalances = new Array[Long](transfers.length * 2)
+      var stagedCount    = 0
+      def stagedBalance(index: Int): Long =
+        var offset = 0
+        while offset < stagedCount do
+          if stagedIndexes(offset) == index then return stagedBalances(offset)
+          offset += 1
+        stagedIndexes(stagedCount) = index
+        stagedBalances(stagedCount) = balances(index)
+        stagedCount += 1
+        balances(index)
+      def writeStaged(index: Int, value: Long): Unit =
+        var offset = 0
+        while offset < stagedCount do
+          if stagedIndexes(offset) == index then
+            stagedBalances(offset) = value
+            return
+          offset += 1
+        throw IllegalStateException(s"account index $index was not staged")
       val prepared                            = scala.collection.mutable.ArrayBuffer.empty[Transfer]
       var failure: Option[ExecutionRejection] = None
       transfers.iterator.zipWithIndex.takeWhile(_ => failure.isEmpty).foreach { case (transfer, position) =>
@@ -114,8 +142,10 @@ final class DenseLedgerBackend private (
           _         <- TransferValidator.validate(topology, transfer)
           from      <- topology.metadata(transfer.from)
           to        <- topology.metadata(transfer.to)
-          nextFrom = BigInt(preflight(fromIndex)) - BigInt(transfer.amount)
-          nextTo   = BigInt(preflight(toIndex)) + BigInt(transfer.amount)
+          fromBalance = stagedBalance(fromIndex)
+          toBalance   = stagedBalance(toIndex)
+          nextFrom    = BigInt(fromBalance) - BigInt(transfer.amount)
+          nextTo      = BigInt(toBalance) + BigInt(transfer.amount)
           _ <- Either.cond(nextFrom.isValidLong && nextTo.isValidLong, (), s"Overflow at position $position")
           _ <- Either.cond(from.accepts(nextFrom.toLong), (), s"Source bounds at position $position")
           _ <- Either.cond(to.accepts(nextTo.toLong), (), s"Target bounds at position $position")
@@ -128,17 +158,16 @@ final class DenseLedgerBackend private (
               else
                 val fromIndex = indexByAccount(AccountId.value(transfer.from).toLong)
                 val toIndex   = indexByAccount(AccountId.value(transfer.to).toLong)
-                rejectionReason(transfer, fromIndex, toIndex, preflight)
+                rejectionReason(transfer, fromIndex, toIndex, stagedBalance(fromIndex), stagedBalance(toIndex))
             failure = Some(ExecutionRejection(Some(position), reason, currentVersion))
           case Right((fromIndex, toIndex, nextFrom, nextTo)) =>
-            preflight(fromIndex) = nextFrom
-            preflight(toIndex) = nextTo
+            writeStaged(fromIndex, nextFrom)
+            writeStaged(toIndex, nextTo)
             prepared += transfer
       }
       failure match
         case Some(error) => Left(error)
         case None =>
-          val staged      = preflight
           val nextVersion = Math.addExact(currentVersion, 1L)
           val evidenceEither: Either[ExecutionRejection, ExecutionEvidence] = mode match
             case ExecutionEvidenceMode.TransferLog =>
@@ -168,7 +197,10 @@ final class DenseLedgerBackend private (
                   )
                 )
           evidenceEither.map { evidence =>
-            balances = staged
+            var offset = 0
+            while offset < stagedCount do
+              balances(stagedIndexes(offset)) = stagedBalances(offset)
+              offset += 1
             currentVersion = nextVersion
             evidence
           }
