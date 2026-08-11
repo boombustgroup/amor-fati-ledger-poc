@@ -30,6 +30,14 @@ final class DenseLedgerBackend private (
     val id: LedgerStateId
 ):
   private val freeIndexes = scala.collection.mutable.ArrayDeque.empty[Int]
+  /** Reused, index-addressed staging workspace for one execution. An epoch
+    * marks the entries visible to the current commit, avoiding both a full
+    * balance clone and the former linear scan through touched accounts.
+    */
+  private val stagingEpochs          = new Array[Int](preparedCapacity)
+  private val stagingBalances        = new Array[Long](preparedCapacity)
+  private val touchedStagingIndexes  = new Array[Int](preparedCapacity)
+  private var currentStagingEpoch    = 0
 
   def version: Long = currentVersion
 
@@ -101,6 +109,13 @@ final class DenseLedgerBackend private (
     try Some(Math.addExact(left, right))
     catch case _: ArithmeticException => None
 
+  private def beginStagingEpoch(): Int =
+    if currentStagingEpoch == Int.MaxValue then
+      java.util.Arrays.fill(stagingEpochs, 0)
+      currentStagingEpoch = 1
+    else currentStagingEpoch += 1
+    currentStagingEpoch
+
   def snapshot: LedgerState =
     val visible = (0 until size).iterator.filter(active).map(index => accountByIndex(index) -> balances(index)).filter(_._2 != 0L).toMap
     LedgerState.make(topology, visible, currentVersion, preparedCapacity, id)
@@ -117,29 +132,23 @@ final class DenseLedgerBackend private (
         case ExecutionEvidenceMode.AggregatedByMechanism => AggregatedEvidence.create(Vector.empty, 0L, 0L, currentVersion, currentVersion)
       Right(evidence)
     else
-      /** Stages only accounts touched by this execution. The former whole `balances.clone()` made the cost of a two-leg payment linear in
-        * every inactive, unrelated account in the prepared ledger.
+      /** Stages only accounts touched by this execution. The workspace is
+        * reused and indexed by dense account slot, so lookup stays O(1) even
+        * when one batch touches many distinct accounts.
         */
-      val stagedIndexes  = new Array[Int](transfers.length * 2)
-      val stagedBalances = new Array[Long](transfers.length * 2)
-      var stagedCount    = 0
+      val stagingEpoch = beginStagingEpoch()
+      var stagedCount  = 0
       def stagedBalance(index: Int): Long =
-        var offset = 0
-        while offset < stagedCount do
-          if stagedIndexes(offset) == index then return stagedBalances(offset)
-          offset += 1
-        stagedIndexes(stagedCount) = index
-        stagedBalances(stagedCount) = balances(index)
-        stagedCount += 1
-        balances(index)
+        if stagingEpochs(index) == stagingEpoch then stagingBalances(index)
+        else
+          stagingEpochs(index) = stagingEpoch
+          stagingBalances(index) = balances(index)
+          touchedStagingIndexes(stagedCount) = index
+          stagedCount += 1
+          balances(index)
       def writeStaged(index: Int, value: Long): Unit =
-        var offset = 0
-        while offset < stagedCount do
-          if stagedIndexes(offset) == index then
-            stagedBalances(offset) = value
-            return
-          offset += 1
-        throw IllegalStateException(s"account index $index was not staged")
+        if stagingEpochs(index) != stagingEpoch then throw IllegalStateException(s"account index $index was not staged")
+        stagingBalances(index) = value
       val prepared                            = scala.collection.mutable.ArrayBuffer.empty[Transfer]
       var failure: Option[ExecutionRejection] = None
       transfers.iterator.zipWithIndex.takeWhile(_ => failure.isEmpty).foreach { case (transfer, position) =>
@@ -206,7 +215,7 @@ final class DenseLedgerBackend private (
           evidenceEither.map { evidence =>
             var offset = 0
             while offset < stagedCount do
-              balances(stagedIndexes(offset)) = stagedBalances(offset)
+              balances(touchedStagingIndexes(offset)) = stagingBalances(touchedStagingIndexes(offset))
               offset += 1
             currentVersion = nextVersion
             evidence

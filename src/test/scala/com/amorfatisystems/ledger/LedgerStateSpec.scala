@@ -106,6 +106,31 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     backend.version shouldBe 1L
   }
 
+  it should "match reference execution for one batch touching many distinct accounts" in {
+    val pairCount = 512
+    val accounts  = (0 until pairCount * 2).map { offset =>
+      AccountId(offset + 1) -> AccountMetadata(X)
+    }.toMap
+    val wideTopology = LedgerTopology.validate(accounts).toOption.get
+    val opening = (0 until pairCount).map { offset =>
+      AccountId(offset * 2 + 1) -> 1L
+    }.toMap
+    val state     = LedgerState.initial(wideTopology, opening, preparedCapacity = pairCount * 2).toOption.get
+    val transfers = Vector.tabulate(pairCount) { offset =>
+      Transfer(AccountId(offset * 2 + 1), AccountId(offset * 2 + 2), 1L, M, P)
+    }
+    val expected = LedgerStateExecutor.executeSequence(state, transfers, state.version).toOption.get
+    val dense    = DenseLedgerBackend.prepare(state)
+
+    val actual = dense.execute(transfers, dense.version).toOption.get
+
+    dense.snapshot.balances shouldBe expected._1.balances
+    dense.version shouldBe expected._1.version
+    actual.applied shouldBe transfers
+    actual.inputVersion shouldBe 0L
+    actual.outputVersion shouldBe 1L
+  }
+
   it should "match reference execution across deterministic randomized batches" in {
     val random    = new scala.util.Random(17L)
     var reference = LedgerState.initial(topology, Map(A -> 50L, B -> 0L), preparedCapacity = 3).toOption.get
