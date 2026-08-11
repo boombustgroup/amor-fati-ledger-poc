@@ -89,10 +89,17 @@ final class DenseLedgerBackend private (
       case (Right(from), _) if !from.canDebit                       => ExecutionRejectionReason.PermissionDenied
       case (_, Right(to)) if !to.canCredit                          => ExecutionRejectionReason.PermissionDenied
       case _ =>
-        val nextFrom = BigInt(fromBalance) - BigInt(transfer.amount)
-        val nextTo   = BigInt(toBalance) + BigInt(transfer.amount)
-        if !nextFrom.isValidLong || !nextTo.isValidLong then ExecutionRejectionReason.Overflow
+        if subtractExact(fromBalance, transfer.amount).isEmpty || addExact(toBalance, transfer.amount).isEmpty then
+          ExecutionRejectionReason.Overflow
         else ExecutionRejectionReason.Bounds
+
+  private def subtractExact(left: Long, right: Long): Option[Long] =
+    try Some(Math.subtractExact(left, right))
+    catch case _: ArithmeticException => None
+
+  private def addExact(left: Long, right: Long): Option[Long] =
+    try Some(Math.addExact(left, right))
+    catch case _: ArithmeticException => None
 
   def snapshot: LedgerState =
     val visible = (0 until size).iterator.filter(active).map(index => accountByIndex(index) -> balances(index)).filter(_._2 != 0L).toMap
@@ -144,12 +151,11 @@ final class DenseLedgerBackend private (
           to        <- topology.metadata(transfer.to)
           fromBalance = stagedBalance(fromIndex)
           toBalance   = stagedBalance(toIndex)
-          nextFrom    = BigInt(fromBalance) - BigInt(transfer.amount)
-          nextTo      = BigInt(toBalance) + BigInt(transfer.amount)
-          _ <- Either.cond(nextFrom.isValidLong && nextTo.isValidLong, (), s"Overflow at position $position")
-          _ <- Either.cond(from.accepts(nextFrom.toLong), (), s"Source bounds at position $position")
-          _ <- Either.cond(to.accepts(nextTo.toLong), (), s"Target bounds at position $position")
-        yield (fromIndex, toIndex, nextFrom.toLong, nextTo.toLong)) match
+          nextFrom <- subtractExact(fromBalance, transfer.amount).toRight(s"Overflow at position $position")
+          nextTo   <- addExact(toBalance, transfer.amount).toRight(s"Overflow at position $position")
+          _        <- Either.cond(from.accepts(nextFrom), (), s"Source bounds at position $position")
+          _        <- Either.cond(to.accepts(nextTo), (), s"Target bounds at position $position")
+        yield (fromIndex, toIndex, nextFrom, nextTo)) match
           case Left(_) =>
             val reason =
               if !indexByAccount
@@ -171,10 +177,11 @@ final class DenseLedgerBackend private (
           val nextVersion = Math.addExact(currentVersion, 1L)
           val evidenceEither: Either[ExecutionRejection, ExecutionEvidence] = mode match
             case ExecutionEvidenceMode.TransferLog =>
-              val total = prepared.foldLeft(BigInt(0))((sum, transfer) => sum + transfer.amount)
-              if total.isValidLong then
-                Right(TransferLogEvidence.create(prepared.toVector, total.toLong, total.toLong, currentVersion, nextVersion))
-              else Left(ExecutionRejection(None, ExecutionRejectionReason.Overflow, currentVersion))
+              var total: Option[Long] = Some(0L)
+              prepared.foreach(transfer => total = total.flatMap(value => addExact(value, transfer.amount)))
+              total match
+                case Some(value) => Right(TransferLogEvidence.create(prepared.toVector, value, value, currentVersion, nextVersion))
+                case None        => Left(ExecutionRejection(None, ExecutionRejectionReason.Overflow, currentVersion))
             case ExecutionEvidenceMode.AggregatedByMechanism =>
               val grouped = scala.collection.mutable.Map.empty[(CurrencyId, AccountId, AccountId, MechanismId), BigInt]
               prepared.foreach { transfer =>
