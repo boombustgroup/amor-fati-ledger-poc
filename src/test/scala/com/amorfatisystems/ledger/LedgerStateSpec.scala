@@ -15,6 +15,19 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     .toOption
     .get
 
+  private def indexedBatch(backend: DenseLedgerBackend, transfers: Vector[Transfer]): DenseLedgerIndexedTransferBatch =
+    val batch = DenseLedgerIndexedTransferBatch.allocate(backend.indexedBatchBinding, transfers.length)
+    transfers.foreach { transfer =>
+      batch.append(
+        backend.denseAccountIndex(transfer.from).getOrElse(fail(s"missing indexed source ${transfer.from}")),
+        backend.denseAccountIndex(transfer.to).getOrElse(fail(s"missing indexed target ${transfer.to}")),
+        transfer.amount,
+        transfer.mechanism,
+        transfer.period
+      )
+    }
+    batch.seal()
+
   "LedgerState" should "execute atomically and expose input/output evidence versions" in {
     val state  = LedgerState.initial(topology, Map(A -> 50L, B -> 0L), preparedCapacity = 3).toOption.get
     val result = LedgerStateExecutor.execute(state, Transfer(A, B, 20L, M, P), expectedVersion = 0L)
@@ -84,6 +97,31 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     backend.version shouldBe 1L
   }
 
+  it should "execute a sealed index-addressed batch with the same state and transfer-log evidence" in {
+    val state     = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
+    val backend   = DenseLedgerBackend.prepare(state)
+    val transfers = Vector(Transfer(A, B, 10L, M, P), Transfer(A, B, 5L, M, P))
+
+    val result = backend.executeIndexed(indexedBatch(backend, transfers), backend.version)
+
+    result.map(_.applied) shouldBe Right(transfers)
+    result.map(_.inputVersion) shouldBe Right(0L)
+    result.map(_.outputVersion) shouldBe Right(1L)
+    backend.snapshot.balances shouldBe Map(A -> 35L, B -> 15L)
+  }
+
+  it should "reject an index-addressed batch bound to a different dense backend before mutation" in {
+    val state = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
+    val first = DenseLedgerBackend.prepare(state)
+    val other = DenseLedgerBackend.prepare(state)
+
+    val rejection = other.executeIndexed(indexedBatch(first, Vector(Transfer(A, B, 10L, M, P))), other.version).left.toOption.get
+
+    rejection.reason shouldBe ExecutionRejectionReason.IndexedBatchBackendMismatch
+    other.snapshot.balances shouldBe Map(A -> 50L)
+    other.version shouldBe 0L
+  }
+
   it should "discard staged dense changes on rejection" in {
     val state   = LedgerState.initial(topology, Map(A -> 50L, B -> 0L)).toOption.get
     val backend = DenseLedgerBackend.prepare(state)
@@ -108,14 +146,14 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
 
   it should "match reference execution for one batch touching many distinct accounts" in {
     val pairCount = 512
-    val accounts  = (0 until pairCount * 2).map { offset =>
+    val accounts = (0 until pairCount * 2).map { offset =>
       AccountId(offset + 1) -> AccountMetadata(X)
     }.toMap
     val wideTopology = LedgerTopology.validate(accounts).toOption.get
     val opening = (0 until pairCount).map { offset =>
       AccountId(offset * 2 + 1) -> 1L
     }.toMap
-    val state     = LedgerState.initial(wideTopology, opening, preparedCapacity = pairCount * 2).toOption.get
+    val state = LedgerState.initial(wideTopology, opening, preparedCapacity = pairCount * 2).toOption.get
     val transfers = Vector.tabulate(pairCount) { offset =>
       Transfer(AccountId(offset * 2 + 1), AccountId(offset * 2 + 2), 1L, M, P)
     }
