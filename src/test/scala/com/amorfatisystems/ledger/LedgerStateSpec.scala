@@ -93,6 +93,19 @@ class LedgerStateSpec extends AnyFlatSpec with Matchers:
     backend.snapshot.balances shouldBe Map(A -> 50L)
   }
 
+  it should "preserve atomic semantics with a large prepared capacity" in {
+    val state   = LedgerState.initial(topology, Map(A -> 50L, B -> 0L), preparedCapacity = 100_000).toOption.get
+    val backend = DenseLedgerBackend.prepare(state)
+
+    backend.execute(Vector(Transfer(A, B, 20L, M, P), Transfer(A, B, 90L, M, P)), backend.version).isLeft shouldBe true
+    backend.snapshot.balances shouldBe Map(A -> 50L)
+    backend.version shouldBe 0L
+
+    backend.execute(Vector(Transfer(A, B, 20L, M, P)), backend.version).isRight shouldBe true
+    backend.snapshot.balances shouldBe Map(A -> 30L, B -> 20L)
+    backend.version shouldBe 1L
+  }
+
   it should "match reference execution across deterministic randomized batches" in {
     val random    = new scala.util.Random(17L)
     var reference = LedgerState.initial(topology, Map(A -> 50L, B -> 0L), preparedCapacity = 3).toOption.get
